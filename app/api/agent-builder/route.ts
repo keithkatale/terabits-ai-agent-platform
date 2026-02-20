@@ -1,5 +1,9 @@
 import { streamText, convertToModelMessages, tool } from 'ai'
-import { google } from '@ai-sdk/google'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY!,
+})
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { getBuilderSystemPrompt } from '@/lib/orchestrator/system-prompt'
