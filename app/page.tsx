@@ -7,15 +7,17 @@ import { Footer } from '@/components/landing/footer'
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-svh flex-col">
-      <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-6">
+    <div className="flex min-h-svh flex-col bg-background">
+      {/* Minimal top bar -- like Claude's */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
               <span className="text-sm font-bold text-primary-foreground">T</span>
             </div>
             <span className="text-lg font-semibold text-foreground">Terabits</span>
           </Link>
+
           <nav className="hidden items-center gap-6 md:flex">
             <a href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
               How it Works
@@ -24,6 +26,7 @@ export default function LandingPage() {
               Use Cases
             </a>
           </nav>
+
           <div className="flex items-center gap-3">
             <Link href="/auth/login">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
@@ -31,7 +34,7 @@ export default function LandingPage() {
               </Button>
             </Link>
             <Link href="/auth/sign-up">
-              <Button size="sm">Get Started</Button>
+              <Button size="sm">Sign up</Button>
             </Link>
           </div>
         </div>

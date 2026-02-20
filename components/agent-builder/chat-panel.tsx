@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { Button } from '@/components/ui/button'
+import { Send } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import type { Agent, AgentSkill } from '@/lib/types'
 import type { Node, Edge } from '@xyflow/react'
 
@@ -28,6 +30,42 @@ interface ChatPanelProps {
 export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const initialPromptSent = useRef(false)
+
+  // Fetch latest workflow data from Supabase when tools finish
+  const refreshWorkflow = useCallback(async () => {
+    const supabase = createClient()
+
+    const [{ data: nodes }, { data: edges }, { data: skills }, { data: agentData }] = await Promise.all([
+      supabase.from('workflow_nodes').select('*').eq('agent_id', agent.id),
+      supabase.from('workflow_edges').select('*').eq('agent_id', agent.id),
+      supabase.from('agent_skills').select('*').eq('agent_id', agent.id),
+      supabase.from('agents').select('*').eq('id', agent.id).single(),
+    ])
+
+    const flowNodes: Node[] = (nodes ?? []).map((n) => ({
+      id: n.node_id,
+      type: n.node_type,
+      position: { x: n.position_x, y: n.position_y },
+      data: { label: n.label, ...n.data },
+    }))
+
+    const flowEdges: Edge[] = (edges ?? []).map((e) => ({
+      id: e.edge_id,
+      source: e.source_node_id,
+      target: e.target_node_id,
+      label: e.label ?? undefined,
+      type: e.edge_type ?? 'smoothstep',
+      animated: true,
+    }))
+
+    onWorkflowUpdate({
+      nodes: flowNodes.length > 0 ? flowNodes : undefined,
+      edges: flowEdges.length > 0 ? flowEdges : undefined,
+      skills: skills ?? undefined,
+      agentUpdate: agentData ?? undefined,
+    })
+  }, [agent.id, onWorkflowUpdate])
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
@@ -43,24 +81,24 @@ export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
         },
       }),
     }),
-    onFinish: (message) => {
-      // Check if the response includes workflow updates via metadata
-      const text = getMessageText(message)
-      try {
-        const workflowMatch = text.match(/\[WORKFLOW_UPDATE\]([\s\S]*?)\[\/WORKFLOW_UPDATE\]/)
-        if (workflowMatch) {
-          const update = JSON.parse(workflowMatch[1])
-          if (update.nodes || update.edges || update.skills || update.agentUpdate) {
-            onWorkflowUpdate(update)
-          }
-        }
-      } catch {
-        // Not a workflow update message, that's fine
-      }
+    onFinish: () => {
+      // After the AI finishes, refresh from DB in case tools were called
+      refreshWorkflow()
     },
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
+
+  // Auto-send initial prompt from landing page
+  useEffect(() => {
+    if (initialPromptSent.current) return
+    const storedPrompt = sessionStorage.getItem('terabits_initial_prompt')
+    if (storedPrompt && messages.length === 0 && status === 'ready') {
+      initialPromptSent.current = true
+      sessionStorage.removeItem('terabits_initial_prompt')
+      sendMessage({ text: storedPrompt })
+    }
+  }, [messages.length, status, sendMessage])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -114,7 +152,6 @@ export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
         <div className="space-y-4">
           {messages.map((message) => {
             const text = getMessageText(message)
-            // Filter out workflow update metadata from display
             const displayText = text
               .replace(/\[WORKFLOW_UPDATE\][\s\S]*?\[\/WORKFLOW_UPDATE\]/g, '')
               .trim()
@@ -175,10 +212,7 @@ export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
             className="flex-1 rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
           <Button type="submit" size="sm" disabled={isLoading || !input.trim()}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m22 2-7 20-4-9-9-4z" />
-              <path d="M22 2 11 13" />
-            </svg>
+            <Send className="h-4 w-4" />
             <span className="sr-only">Send</span>
           </Button>
         </form>

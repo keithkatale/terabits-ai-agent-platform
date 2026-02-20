@@ -47,7 +47,9 @@ export async function updateSession(request: NextRequest) {
       request.nextUrl.pathname.startsWith('/agent'))
   ) {
     const url = request.nextUrl.clone()
+    const returnTo = request.nextUrl.pathname
     url.pathname = '/auth/login'
+    url.searchParams.set('redirect_to', returnTo)
     return NextResponse.redirect(url)
   }
 
