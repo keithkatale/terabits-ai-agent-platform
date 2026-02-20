@@ -17,7 +17,7 @@ export default async function NewAgentPage() {
       name: 'New AI Employee',
       category: 'general',
       status: 'draft',
-      model: 'gemini-2.5-flash-preview',
+      model: 'gemini-3-flash-preview',
       conversation_phase: 'discovery',
     })
     .select()

@@ -86,7 +86,7 @@ export function HeroSection() {
             />
             <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between">
               <span className="text-xs text-muted-foreground/50">
-                {'Gemini 2.5 Flash'}
+                {'Gemini 3 Flash'}
               </span>
               <button
                 onClick={() => handleSubmit()}

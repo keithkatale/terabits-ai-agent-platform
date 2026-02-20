@@ -241,7 +241,7 @@ export function ChatPanel({ agent, onWorkflowUpdate, isFullWidth }: ChatPanelPro
               />
               <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground/40">
-                  Gemini 2.5 Flash
+                  Gemini 3 Flash
                 </span>
                 <Button
                   type="submit"
