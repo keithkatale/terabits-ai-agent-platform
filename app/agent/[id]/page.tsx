@@ -25,19 +25,7 @@ export default async function AgentPage({
     notFound()
   }
 
-  // Load existing workflow
-  const [{ data: nodes }, { data: edges }, { data: skills }] = await Promise.all([
-    supabase.from('workflow_nodes').select('*').eq('agent_id', id),
-    supabase.from('workflow_edges').select('*').eq('agent_id', id),
-    supabase.from('agent_skills').select('*').eq('agent_id', id),
-  ])
-
   return (
-    <AgentBuilder
-      agent={agent}
-      initialNodes={nodes ?? []}
-      initialEdges={edges ?? []}
-      initialSkills={skills ?? []}
-    />
+    <AgentBuilder agent={agent} />
   )
 }

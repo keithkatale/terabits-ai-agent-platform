@@ -9,12 +9,20 @@ export default async function NewAgentPage() {
     redirect('/auth/login')
   }
 
-  // Create a new agent in draft state
+  // Create a new agent in draft state with timestamp-based temporary name
+  const timestamp = new Date().toLocaleString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  })
+  
   const { data: agent, error } = await supabase
     .from('agents')
     .insert({
       user_id: user.id,
-      name: 'New AI Employee',
+      name: `New Agent (${timestamp})`,
       category: 'general',
       status: 'draft',
       model: 'gemini-3-flash-preview',

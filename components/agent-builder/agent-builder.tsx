@@ -4,88 +4,152 @@ import { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ChatPanel } from '@/components/agent-builder/chat-panel'
-import { WorkflowCanvas } from '@/components/agent-builder/workflow-canvas'
+import { AgentCanvas } from '@/components/agent-builder/agent-canvas'
+import { AgentExecutionView } from '@/components/agent-builder/agent-execution-view'
 import { PhaseIndicator } from '@/components/agent-builder/phase-indicator'
-import { PanelRightOpen, PanelRightClose, ArrowLeft } from 'lucide-react'
-import type { Agent, AgentSkill, WorkflowNode, WorkflowEdge } from '@/lib/types'
-import type { Node, Edge } from '@xyflow/react'
+import { PanelRightOpen, ArrowLeft } from 'lucide-react'
+import { useNodesState, useEdgesState, type Node, type Edge } from '@xyflow/react'
+import { createClient } from '@/lib/supabase/client'
+import type { Agent } from '@/lib/types'
 
 interface AgentBuilderProps {
   agent: Agent
-  initialNodes: WorkflowNode[]
-  initialEdges: WorkflowEdge[]
-  initialSkills: AgentSkill[]
 }
-
-function dbNodesToFlow(dbNodes: WorkflowNode[]): Node[] {
-  return dbNodes.map((n) => ({
-    id: n.node_id,
-    type: n.node_type,
-    position: { x: n.position_x, y: n.position_y },
-    data: { label: n.label, ...n.data },
-  }))
-}
-
-function dbEdgesToFlow(dbEdges: WorkflowEdge[]): Edge[] {
-  return dbEdges.map((e) => ({
-    id: e.edge_id,
-    source: e.source_node_id,
-    target: e.target_node_id,
-    label: e.label ?? undefined,
-    type: e.edge_type,
-  }))
-}
-
-// Phases where the canvas should be hidden -- conversation-only
-const CHAT_ONLY_PHASES = ['discovery', 'planning']
 
 export function AgentBuilder({
   agent,
-  initialNodes,
-  initialEdges,
-  initialSkills,
 }: AgentBuilderProps) {
   const [currentAgent, setCurrentAgent] = useState(agent)
-  const [nodes, setNodes] = useState<Node[]>(() => dbNodesToFlow(initialNodes))
-  const [edges, setEdges] = useState<Edge[]>(() => dbEdgesToFlow(initialEdges))
-  const [skills, setSkills] = useState<AgentSkill[]>(initialSkills)
+  const [isRunning, setIsRunning] = useState(false)
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(true)
 
-  // Canvas is only shown when building has started (not during discovery/planning)
-  const hasWorkflow = nodes.length > 0
-  const isConversationPhase = CHAT_ONLY_PHASES.includes(currentAgent.conversation_phase)
-  const [canvasManuallyToggled, setCanvasManuallyToggled] = useState(false)
-  const [canvasForceHidden, setCanvasForceHidden] = useState(false)
-
-  // Show canvas automatically when workflow appears or phase transitions to building+
-  const showCanvas = canvasManuallyToggled
-    ? !canvasForceHidden
-    : (!isConversationPhase || hasWorkflow)
-
-  // When phase transitions from conversation to building, auto-reveal canvas
+  // Load existing workflow from database on mount
   useEffect(() => {
-    if (!isConversationPhase && !canvasManuallyToggled) {
-      setCanvasForceHidden(false)
+    const loadWorkflow = async () => {
+      const supabase = createClient()
+      const [{ data: dbNodes }, { data: dbEdges }] = await Promise.all([
+        supabase.from('workflow_nodes').select('*').eq('agent_id', agent.id).order('created_at', { ascending: true }),
+        supabase.from('workflow_edges').select('*').eq('agent_id', agent.id).order('created_at', { ascending: true }),
+      ])
+
+      if (dbNodes && dbNodes.length > 0) {
+        console.log('Loading nodes from database:', dbNodes)
+        const flowNodes: Node[] = dbNodes.map((n) => ({
+          id: n.node_id,
+          type: n.node_type,
+          position: { x: n.position_x, y: n.position_y },
+          data: {
+            ...n.data,
+            // Ensure all required fields are present
+            label: n.data?.label || n.label,
+            description: n.data?.description || '',
+            nodeType: n.data?.nodeType || 'action',
+            config: n.data?.config || {},
+          },
+        }))
+        console.log('Converted to flow nodes:', flowNodes)
+        setNodes(flowNodes)
+      }
+
+      if (dbEdges && dbEdges.length > 0) {
+        const flowEdges: Edge[] = dbEdges.map((e) => ({
+          id: e.edge_id,
+          source: e.source_node_id,
+          target: e.target_node_id,
+          label: e.label ?? undefined,
+          type: e.edge_type ?? 'default',
+          animated: true,
+        }))
+        setEdges(flowEdges)
+      }
+
+      setIsLoadingWorkflow(false)
     }
-  }, [isConversationPhase, canvasManuallyToggled])
+
+    loadWorkflow()
+  }, [agent.id, setNodes, setEdges])
+
+  // Reload workflow when phase changes to building or complete
+  useEffect(() => {
+    if (currentAgent.conversation_phase === 'building' || currentAgent.conversation_phase === 'complete') {
+      const reloadWorkflow = async () => {
+        const supabase = createClient()
+        const [{ data: dbNodes }, { data: dbEdges }] = await Promise.all([
+          supabase.from('workflow_nodes').select('*').eq('agent_id', agent.id).order('created_at', { ascending: true }),
+          supabase.from('workflow_edges').select('*').eq('agent_id', agent.id).order('created_at', { ascending: true }),
+        ])
+
+        if (dbNodes && dbNodes.length > 0) {
+          const flowNodes: Node[] = dbNodes.map((n) => ({
+            id: n.node_id,
+            type: n.node_type,
+            position: { x: n.position_x, y: n.position_y },
+            data: {
+              ...n.data,
+              // Ensure all required fields are present
+              label: n.data?.label || n.label,
+              description: n.data?.description || '',
+              nodeType: n.data?.nodeType || 'action',
+              config: n.data?.config || {},
+            },
+          }))
+          setNodes(flowNodes)
+        }
+
+        if (dbEdges && dbEdges.length > 0) {
+          const flowEdges: Edge[] = dbEdges.map((e) => ({
+            id: e.edge_id,
+            source: e.source_node_id,
+            target: e.target_node_id,
+            label: e.label ?? undefined,
+            type: e.edge_type ?? 'default',
+            animated: true,
+          }))
+          setEdges(flowEdges)
+        }
+      }
+
+      // Small delay to let database writes complete
+      const timer = setTimeout(reloadWorkflow, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [currentAgent.conversation_phase, agent.id, setNodes, setEdges])
+
+  const handleAddNode = useCallback((node: Node) => {
+    setNodes((nds) => [...nds, node])
+  }, [setNodes])
+
+  const handleAddEdge = useCallback((edge: Edge) => {
+    setEdges((eds) => [...eds, edge])
+  }, [setEdges])
+
+  const handleUpdateNode = useCallback((id: string, updates: Record<string, unknown>) => {
+    setNodes((nds) =>
+      nds.map((node) =>
+        node.id === id
+          ? { ...node, data: { ...node.data, ...updates } }
+          : node
+      )
+    )
+  }, [setNodes])
 
   const handleWorkflowUpdate = useCallback((data: {
-    nodes?: Node[]
-    edges?: Edge[]
-    skills?: AgentSkill[]
     agentUpdate?: Partial<Agent>
   }) => {
-    if (data.nodes) setNodes(data.nodes)
-    if (data.edges) setEdges(data.edges)
-    if (data.skills) setSkills(data.skills)
     if (data.agentUpdate) {
       setCurrentAgent((prev) => ({ ...prev, ...data.agentUpdate }))
     }
   }, [])
 
-  const toggleCanvas = () => {
-    setCanvasManuallyToggled(true)
-    setCanvasForceHidden((prev) => !prev)
+  const handleStopAgent = () => {
+    setIsRunning(false)
   }
+
+  // Show canvas when building or complete phase
+  const showCanvas = currentAgent.conversation_phase === 'building' || 
+                     currentAgent.conversation_phase === 'complete'
 
   return (
     <div className="flex h-svh flex-col bg-background">
@@ -105,27 +169,19 @@ export function AgentBuilder({
           <PhaseIndicator phase={currentAgent.conversation_phase} />
         </div>
         <div className="flex items-center gap-2">
-          {/* Only show canvas toggle when building has started or there are nodes */}
-          {(!isConversationPhase || hasWorkflow) && (
+          {/* Run Agent Button */}
+          {!isRunning && currentAgent.conversation_phase === 'complete' && (
             <Button
-              variant="ghost"
+              variant="default"
               size="sm"
-              className="gap-1.5 text-xs text-muted-foreground"
-              onClick={toggleCanvas}
+              className="gap-1.5"
+              onClick={() => setIsRunning(true)}
             >
-              {showCanvas ? (
-                <>
-                  <PanelRightClose className="h-3.5 w-3.5" />
-                  Hide Canvas
-                </>
-              ) : (
-                <>
-                  <PanelRightOpen className="h-3.5 w-3.5" />
-                  Show Canvas
-                </>
-              )}
+              <PanelRightOpen className="h-3.5 w-3.5" />
+              Run Agent
             </Button>
           )}
+          
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="text-xs text-muted-foreground">
               Dashboard
@@ -134,32 +190,61 @@ export function AgentBuilder({
         </div>
       </header>
 
-      {/* Main content area -- adapts between full chat and split */}
+      {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chat panel */}
-        <div className={`flex flex-col transition-all duration-300 ease-in-out ${
-          showCanvas
-            ? 'w-full md:w-1/2 lg:w-2/5 border-r border-border'
-            : 'w-full'
-        }`}>
-          <ChatPanel
-            agent={currentAgent}
-            onWorkflowUpdate={handleWorkflowUpdate}
-            isFullWidth={!showCanvas}
-          />
-        </div>
+        {!isRunning ? (
+          /* Building mode: Chat + Canvas */
+          <>
+            {/* Chat panel - 30% when canvas visible, 100% otherwise */}
+            <div className={`flex flex-col border-r border-border ${showCanvas ? 'w-[30%]' : 'flex-1'}`}>
+              <ChatPanel
+                agent={currentAgent}
+                onWorkflowUpdate={handleWorkflowUpdate}
+                onAddNode={handleAddNode}
+                onAddEdge={handleAddEdge}
+                onUpdateNode={handleUpdateNode}
+                isFullWidth={!showCanvas}
+              />
+            </div>
 
-        {/* React Flow canvas -- only mounts when visible */}
-        {showCanvas && (
-          <div className="hidden flex-1 md:block">
-            <WorkflowCanvas
-              nodes={nodes}
-              edges={edges}
-              skills={skills}
-              onNodesChange={setNodes}
-              onEdgesChange={setEdges}
-            />
-          </div>
+            {/* Canvas - 70% when building */}
+            {showCanvas && !isLoadingWorkflow && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <AgentCanvas
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onAddEdge={handleAddEdge}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          /* Execution mode: Chat + Execution View */
+          <>
+            {/* Chat panel - 30% */}
+            <div className="w-[30%] flex flex-col border-r border-border">
+              <ChatPanel
+                agent={currentAgent}
+                onWorkflowUpdate={handleWorkflowUpdate}
+                onAddNode={handleAddNode}
+                onAddEdge={handleAddEdge}
+                onUpdateNode={handleUpdateNode}
+                isFullWidth={false}
+              />
+            </div>
+
+            {/* Execution panel - 70% */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <AgentExecutionView
+                agent={currentAgent}
+                isRunning={isRunning}
+                onStop={handleStopAgent}
+                triggerConfig={undefined}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>
