@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { Button } from '@/components/ui/button'
-import { Send } from 'lucide-react'
+import { ArrowUp, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Agent, AgentSkill } from '@/lib/types'
 import type { Node, Edge } from '@xyflow/react'
@@ -25,17 +25,17 @@ interface ChatPanelProps {
     skills?: AgentSkill[]
     agentUpdate?: Partial<Agent>
   }) => void
+  isFullWidth: boolean
 }
 
-export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
+export function ChatPanel({ agent, onWorkflowUpdate, isFullWidth }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const initialPromptSent = useRef(false)
 
-  // Fetch latest workflow data from Supabase when tools finish
   const refreshWorkflow = useCallback(async () => {
     const supabase = createClient()
-
     const [{ data: nodes }, { data: edges }, { data: skills }, { data: agentData }] = await Promise.all([
       supabase.from('workflow_nodes').select('*').eq('agent_id', agent.id),
       supabase.from('workflow_edges').select('*').eq('agent_id', agent.id),
@@ -82,7 +82,6 @@ export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
       }),
     }),
     onFinish: () => {
-      // After the AI finishes, refresh from DB in case tools were called
       refreshWorkflow()
     },
   })
@@ -104,6 +103,15 @@ export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      textarea.style.height = 'auto'
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
+    }
+  }, [input])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
@@ -111,111 +119,146 @@ export function ChatPanel({ agent, onWorkflowUpdate }: ChatPanelProps) {
     setInput('')
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e)
+    }
+  }
+
+  // The container classes: full-width gets centered max-width like Claude, sidebar mode gets full
+  const containerClass = isFullWidth
+    ? 'mx-auto w-full max-w-2xl px-4 lg:px-0'
+    : 'w-full px-4'
+
   return (
     <div className="flex h-full flex-col">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {messages.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <span className="text-lg font-bold text-primary">T</span>
-            </div>
-            <div>
-              <h3 className="font-semibold text-foreground">
-                {"Let's build your AI employee"}
-              </h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                Tell me about the role you need filled. What tasks should this AI employee handle? I will ask you questions to understand exactly what you need.
-              </p>
-            </div>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {[
-                'I need a customer support agent',
-                'Help me create a content writer',
-                'Build me a data analysis assistant',
-                'I want a task automation bot',
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => {
-                    sendMessage({ text: suggestion })
-                  }}
-                  className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          {messages.map((message) => {
-            const text = getMessageText(message)
-            const displayText = text
-              .replace(/\[WORKFLOW_UPDATE\][\s\S]*?\[\/WORKFLOW_UPDATE\]/g, '')
-              .trim()
-
-            if (!displayText) return null
-
-            return (
-              <div
-                key={message.id}
-                className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : ''}`}
-              >
-                {message.role === 'assistant' && (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <span className="text-xs font-medium text-primary">T</span>
-                  </div>
-                )}
-                <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2.5 ${
-                    message.role === 'user'
-                      ? 'rounded-tr-none bg-primary text-primary-foreground'
-                      : 'rounded-tl-none bg-muted text-foreground'
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {displayText}
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto">
+        {messages.length === 0 ? (
+          /* Empty state -- Claude-like centered greeting */
+          <div className="flex h-full flex-col items-center justify-center px-4">
+            <div className={containerClass}>
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
+                  <Sparkles className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">
+                    {"What role do you need filled?"}
+                  </h2>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {"Describe the AI employee you want to hire. I'll ask questions to understand exactly what you need, then build it for you."}
                   </p>
                 </div>
-              </div>
-            )
-          })}
 
-          {isLoading && messages.length > 0 && (
-            <div className="flex gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-xs font-medium text-primary">T</span>
-              </div>
-              <div className="rounded-lg rounded-tl-none bg-muted px-4 py-2.5">
-                <div className="flex items-center gap-1">
-                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
-                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:150ms]" />
-                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                {/* Suggestion chips */}
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {[
+                    'I need a customer support agent for my online store',
+                    'Help me create a weekly content writer',
+                    'Build a data analysis assistant for sales reports',
+                    'I want a task automation bot for invoice processing',
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => sendMessage({ text: suggestion })}
+                      className="rounded-full border border-border bg-card px-3.5 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
-          )}
-        </div>
-        <div ref={messagesEndRef} />
+          </div>
+        ) : (
+          /* Messages list */
+          <div className={`py-6 ${containerClass}`}>
+            <div className="space-y-6">
+              {messages.map((message) => {
+                const text = getMessageText(message)
+                const displayText = text
+                  .replace(/\[WORKFLOW_UPDATE\][\s\S]*?\[\/WORKFLOW_UPDATE\]/g, '')
+                  .trim()
+
+                if (!displayText) return null
+
+                if (message.role === 'user') {
+                  return (
+                    <div key={message.id} className="flex justify-end">
+                      <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground">
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{displayText}</p>
+                      </div>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div key={message.id} className="flex gap-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 mt-0.5">
+                      <span className="text-[10px] font-bold text-primary">T</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{displayText}</p>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {isLoading && messages.length > 0 && (
+                <div className="flex gap-3">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <span className="text-[10px] font-bold text-primary">T</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
+                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div ref={messagesEndRef} />
+          </div>
+        )}
       </div>
 
-      {/* Input */}
-      <div className="border-t border-border p-4">
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe what your AI employee should do..."
-            disabled={isLoading}
-            className="flex-1 rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-          />
-          <Button type="submit" size="sm" disabled={isLoading || !input.trim()}>
-            <Send className="h-4 w-4" />
-            <span className="sr-only">Send</span>
-          </Button>
-        </form>
+      {/* Input area -- Claude-like textarea with send button */}
+      <div className="border-t border-border bg-background pb-4 pt-3">
+        <div className={containerClass}>
+          <form onSubmit={handleSubmit}>
+            <div className="relative rounded-2xl border border-border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:border-primary/30">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Describe what your AI employee should do..."
+                disabled={isLoading}
+                rows={1}
+                className="w-full resize-none rounded-2xl bg-transparent px-4 pt-3.5 pb-12 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
+              />
+              <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground/40">
+                  Gemini 2.5 Flash
+                </span>
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={isLoading || !input.trim()}
+                  className="h-7 w-7 rounded-lg"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                  <span className="sr-only">Send</span>
+                </Button>
+              </div>
+            </div>
+          </form>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground/40">
+            Terabits AI can make mistakes. Review your agent before deploying.
+          </p>
+        </div>
       </div>
     </div>
   )

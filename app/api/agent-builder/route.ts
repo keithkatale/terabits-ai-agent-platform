@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   )
 
   const result = streamText({
-    model: 'google/gemini-2.5-pro-preview',
+    model: 'google/gemini-2.5-flash-preview',
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     maxOutputTokens: 4096,

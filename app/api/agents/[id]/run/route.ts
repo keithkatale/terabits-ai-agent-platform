@@ -61,7 +61,7 @@ export async function POST(
   }).select().single()
 
   const result = streamText({
-    model: agent.model ? `google/${agent.model}` : 'google/gemini-2.5-pro-preview',
+    model: agent.model ? `google/${agent.model}` : 'google/gemini-2.5-flash-preview',
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     maxOutputTokens: 4096,

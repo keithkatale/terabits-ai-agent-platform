@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ChatPanel } from '@/components/agent-builder/chat-panel'
 import { WorkflowCanvas } from '@/components/agent-builder/workflow-canvas'
 import { PhaseIndicator } from '@/components/agent-builder/phase-indicator'
+import { PanelRightOpen, PanelRightClose, ArrowLeft } from 'lucide-react'
 import type { Agent, AgentSkill, WorkflowNode, WorkflowEdge } from '@/lib/types'
 import type { Node, Edge } from '@xyflow/react'
 
@@ -35,6 +36,9 @@ function dbEdgesToFlow(dbEdges: WorkflowEdge[]): Edge[] {
   }))
 }
 
+// Phases where the canvas should be hidden -- conversation-only
+const CHAT_ONLY_PHASES = ['discovery', 'planning']
+
 export function AgentBuilder({
   agent,
   initialNodes,
@@ -45,7 +49,24 @@ export function AgentBuilder({
   const [nodes, setNodes] = useState<Node[]>(() => dbNodesToFlow(initialNodes))
   const [edges, setEdges] = useState<Edge[]>(() => dbEdgesToFlow(initialEdges))
   const [skills, setSkills] = useState<AgentSkill[]>(initialSkills)
-  const [showCanvas, setShowCanvas] = useState(true)
+
+  // Canvas is only shown when building has started (not during discovery/planning)
+  const hasWorkflow = nodes.length > 0
+  const isConversationPhase = CHAT_ONLY_PHASES.includes(currentAgent.conversation_phase)
+  const [canvasManuallyToggled, setCanvasManuallyToggled] = useState(false)
+  const [canvasForceHidden, setCanvasForceHidden] = useState(false)
+
+  // Show canvas automatically when workflow appears or phase transitions to building+
+  const showCanvas = canvasManuallyToggled
+    ? !canvasForceHidden
+    : (!isConversationPhase || hasWorkflow)
+
+  // When phase transitions from conversation to building, auto-reveal canvas
+  useEffect(() => {
+    if (!isConversationPhase && !canvasManuallyToggled) {
+      setCanvasForceHidden(false)
+    }
+  }, [isConversationPhase, canvasManuallyToggled])
 
   const handleWorkflowUpdate = useCallback((data: {
     nodes?: Node[]
@@ -61,50 +82,76 @@ export function AgentBuilder({
     }
   }, [])
 
+  const toggleCanvas = () => {
+    setCanvasManuallyToggled(true)
+    setCanvasForceHidden((prev) => !prev)
+  }
+
   return (
-    <div className="flex h-svh flex-col">
-      {/* Top bar */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-4">
+    <div className="flex h-svh flex-col bg-background">
+      {/* Minimal top bar */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-primary">
-              <span className="text-[10px] font-bold text-primary-foreground">T</span>
-            </div>
+          <Link href="/dashboard" className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
           </Link>
           <div className="h-4 w-px bg-border" />
-          <span className="text-sm font-medium text-foreground">{currentAgent.name}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
+              <span className="text-[10px] font-bold text-primary-foreground">T</span>
+            </div>
+            <span className="text-sm font-medium text-foreground">{currentAgent.name}</span>
+          </div>
           <PhaseIndicator phase={currentAgent.conversation_phase} />
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs"
-            onClick={() => setShowCanvas(!showCanvas)}
-          >
-            {showCanvas ? 'Hide Canvas' : 'Show Canvas'}
-          </Button>
+          {/* Only show canvas toggle when building has started or there are nodes */}
+          {(!isConversationPhase || hasWorkflow) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs text-muted-foreground"
+              onClick={toggleCanvas}
+            >
+              {showCanvas ? (
+                <>
+                  <PanelRightClose className="h-3.5 w-3.5" />
+                  Hide Canvas
+                </>
+              ) : (
+                <>
+                  <PanelRightOpen className="h-3.5 w-3.5" />
+                  Show Canvas
+                </>
+              )}
+            </Button>
+          )}
           <Link href="/dashboard">
-            <Button variant="ghost" size="sm" className="text-xs">
-              Back to Dashboard
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground">
+              Dashboard
             </Button>
           </Link>
         </div>
       </header>
 
-      {/* Main split layout */}
+      {/* Main content area -- adapts between full chat and split */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chat panel (left) */}
-        <div className={`flex flex-col border-r border-border ${showCanvas ? 'w-1/2 lg:w-2/5' : 'w-full'}`}>
+        {/* Chat panel */}
+        <div className={`flex flex-col transition-all duration-300 ease-in-out ${
+          showCanvas
+            ? 'w-full md:w-1/2 lg:w-2/5 border-r border-border'
+            : 'w-full'
+        }`}>
           <ChatPanel
             agent={currentAgent}
             onWorkflowUpdate={handleWorkflowUpdate}
+            isFullWidth={!showCanvas}
           />
         </div>
 
-        {/* React Flow canvas (right) */}
+        {/* React Flow canvas -- only mounts when visible */}
         {showCanvas && (
-          <div className="flex-1">
+          <div className="hidden flex-1 md:block">
             <WorkflowCanvas
               nodes={nodes}
               edges={edges}
