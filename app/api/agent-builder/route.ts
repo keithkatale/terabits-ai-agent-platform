@@ -1,14 +1,16 @@
 import { streamText, convertToModelMessages, tool } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-
-const google = createGoogleGenerativeAI({
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY!,
-})
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { getBuilderSystemPrompt } from '@/lib/orchestrator/system-prompt'
 
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY!,
+})
+
 export async function POST(req: Request) {
+  console.log("[v0] agent-builder API called, GOOGLE_GENERATIVE_AI_API_KEY exists:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY)
+  
   const body = await req.json()
   const { messages, agentId, agentPhase, agentName, agentCategory } = body
 
@@ -20,11 +22,12 @@ export async function POST(req: Request) {
     agentCategory || 'general'
   )
 
+  try {
   const result = streamText({
     model: google('gemini-3-flash-preview'),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
-    maxOutputTokens: 4096,
+    maxTokens: 4096,
     tools: {
       updateAgent: tool({
         description: 'Update the agent name, description, category, status, or conversation phase. Call this when transitioning between phases or when you learn enough to name/describe the agent.',
@@ -202,4 +205,11 @@ export async function POST(req: Request) {
   })
 
   return result.toUIMessageStreamResponse()
+  } catch (error) {
+    console.error("[v0] agent-builder streamText error:", error)
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
 }

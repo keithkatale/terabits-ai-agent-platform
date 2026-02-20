@@ -6,15 +6,21 @@ import { DefaultChatTransport } from 'ai'
 import { Button } from '@/components/ui/button'
 import { ArrowUp, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { Markdown } from '@/components/prompt-kit/markdown'
+import { ThinkingBar } from '@/components/prompt-kit/thinking-bar'
+import { ToolCall } from '@/components/prompt-kit/tool-call'
+import { FeedbackBar } from '@/components/prompt-kit/feedback-bar'
 import type { Agent, AgentSkill } from '@/lib/types'
 import type { Node, Edge } from '@xyflow/react'
 
-function getMessageText(message: { parts?: Array<{ type: string; text?: string }> }): string {
-  if (!message.parts || !Array.isArray(message.parts)) return ''
-  return message.parts
-    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-    .map((p) => p.text)
-    .join('')
+// Tool name to friendly label mapping
+const TOOL_LABELS: Record<string, string> = {
+  updateAgent: 'Updating agent configuration',
+  addWorkflowNodes: 'Building workflow nodes',
+  addWorkflowEdges: 'Connecting workflow edges',
+  addSkill: 'Adding skill capability',
+  saveSystemPrompt: 'Saving system prompt',
+  checkPlatformCapabilities: 'Checking platform capabilities',
 }
 
 interface ChatPanelProps {
@@ -32,6 +38,7 @@ export function ChatPanel({ agent, onWorkflowUpdate, isFullWidth }: ChatPanelPro
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const initialPromptSent = useRef(false)
 
   const refreshWorkflow = useCallback(async () => {
@@ -126,15 +133,14 @@ export function ChatPanel({ agent, onWorkflowUpdate, isFullWidth }: ChatPanelPro
     }
   }
 
-  // The container classes: full-width gets centered max-width like Claude, sidebar mode gets full
   const containerClass = isFullWidth
     ? 'mx-auto w-full max-w-2xl px-4 lg:px-0'
     : 'w-full px-4'
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto">
+    <div className="relative flex h-full flex-col">
+      {/* Messages area -- fills space, scrollable */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-36">
         {messages.length === 0 ? (
           /* Empty state -- Claude-like centered greeting */
           <div className="flex h-full flex-col items-center justify-center px-4">
@@ -144,7 +150,7 @@ export function ChatPanel({ agent, onWorkflowUpdate, isFullWidth }: ChatPanelPro
                   <Sparkles className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-foreground">
+                  <h2 className="text-xl font-semibold text-foreground text-balance">
                     {"What role do you need filled?"}
                   </h2>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -155,10 +161,10 @@ export function ChatPanel({ agent, onWorkflowUpdate, isFullWidth }: ChatPanelPro
                 {/* Suggestion chips */}
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {[
-                    'I need a customer support agent for my online store',
-                    'Help me create a weekly content writer',
-                    'Build a data analysis assistant for sales reports',
-                    'I want a task automation bot for invoice processing',
+                    'Customer support agent for my online store',
+                    'Weekly content writer for social media',
+                    'Data analysis assistant for sales reports',
+                    'Task automation bot for invoice processing',
                   ].map((suggestion) => (
                     <button
                       key={suggestion}
@@ -173,62 +179,117 @@ export function ChatPanel({ agent, onWorkflowUpdate, isFullWidth }: ChatPanelPro
             </div>
           </div>
         ) : (
-          /* Messages list */
+          /* Messages list with Prompt Kit rendering */
           <div className={`py-6 ${containerClass}`}>
-            <div className="space-y-6">
-              {messages.map((message) => {
-                const text = getMessageText(message)
-                const displayText = text
+            <div className="space-y-5">
+              {messages.map((message, messageIndex) => {
+                // Extract text parts
+                const textParts = (message.parts ?? [])
+                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                  .map((p) => p.text)
+                  .join('')
                   .replace(/\[WORKFLOW_UPDATE\][\s\S]*?\[\/WORKFLOW_UPDATE\]/g, '')
                   .trim()
 
-                if (!displayText) return null
+                // Extract tool invocations
+                const toolParts = (message.parts ?? []).filter(
+                  (p): p is { type: 'tool-invocation'; toolInvocation: { toolName: string; state: string; args: Record<string, unknown>; result?: Record<string, unknown> } } =>
+                    p.type === 'tool-invocation'
+                )
 
+                const hasContent = textParts || toolParts.length > 0
+
+                if (!hasContent) return null
+
+                // User message
                 if (message.role === 'user') {
                   return (
                     <div key={message.id} className="flex justify-end">
                       <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground">
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{displayText}</p>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{textParts}</p>
                       </div>
                     </div>
                   )
                 }
 
+                // Assistant message -- rich rendering with Prompt Kit
+                const isLastAssistant = messageIndex === messages.length - 1 && message.role === 'assistant'
+                const isStreaming = isLastAssistant && (status === 'streaming' || status === 'submitted')
+
                 return (
                   <div key={message.id} className="flex gap-3">
+                    {/* Avatar */}
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 mt-0.5">
                       <span className="text-[10px] font-bold text-primary">T</span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{displayText}</p>
+
+                    {/* Message content */}
+                    <div className="min-w-0 flex-1 space-y-2.5">
+                      {/* Tool invocations rendered as ToolCall components */}
+                      {toolParts.map((tp, i) => {
+                        const inv = tp.toolInvocation
+                        const toolState = inv.state === 'result' ? 'completed'
+                          : inv.state === 'call' ? 'running'
+                          : 'pending'
+
+                        return (
+                          <ToolCall
+                            key={`${message.id}-tool-${i}`}
+                            name={TOOL_LABELS[inv.toolName] ?? inv.toolName}
+                            state={toolState as 'pending' | 'running' | 'completed' | 'error'}
+                            input={inv.args}
+                            output={inv.result as Record<string, unknown> | undefined}
+                            defaultOpen={false}
+                          />
+                        )
+                      })}
+
+                      {/* Text content with Markdown rendering */}
+                      {textParts && (
+                        <Markdown id={message.id}>{textParts}</Markdown>
+                      )}
+
+                      {/* Feedback bar -- shown for completed non-streaming assistant messages */}
+                      {!isStreaming && textParts && (
+                        <FeedbackBar messageContent={textParts} />
+                      )}
                     </div>
                   </div>
                 )
               })}
 
-              {isLoading && messages.length > 0 && (
-                <div className="flex gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <span className="text-[10px] font-bold text-primary">T</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
-                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:150ms]" />
-                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:300ms]" />
-                  </div>
-                </div>
-              )}
+              {/* Streaming indicator */}
+              {isLoading && messages.length > 0 && (() => {
+                const lastMsg = messages[messages.length - 1]
+                const lastHasText = (lastMsg?.parts ?? []).some(
+                  (p) => p.type === 'text' && (p as { text?: string }).text?.trim()
+                )
+                // Only show thinking bar if we haven't started getting text yet
+                if (!lastHasText || lastMsg?.role === 'user') {
+                  return (
+                    <div className="flex gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <span className="text-[10px] font-bold text-primary">T</span>
+                      </div>
+                      <div className="flex-1">
+                        <ThinkingBar text="Terabits is thinking" />
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })()}
             </div>
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
-      {/* Input area -- Claude-like textarea with send button */}
-      <div className="border-t border-border bg-background pb-4 pt-3">
-        <div className={containerClass}>
+      {/* Floating input -- no container div, just the input itself floating */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center pb-3">
+        <div className={`pointer-events-auto w-full ${containerClass}`}>
           <form onSubmit={handleSubmit}>
-            <div className="relative rounded-2xl border border-border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:border-primary/30">
+            <div className="relative rounded-2xl border border-border bg-card shadow-lg backdrop-blur-sm transition-all focus-within:shadow-xl focus-within:border-primary/30">
               <textarea
                 ref={textareaRef}
                 value={input}
