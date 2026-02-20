@@ -1,4 +1,5 @@
 import { streamText, convertToModelMessages } from 'ai'
+import { google } from '@ai-sdk/google'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -61,7 +62,7 @@ export async function POST(
   }).select().single()
 
   const result = streamText({
-    model: agent.model ? `google/${agent.model}` : 'google/gemini-3-flash-preview',
+    model: google(agent.model || 'gemini-3-flash-preview'),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     maxOutputTokens: 4096,

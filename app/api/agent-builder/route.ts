@@ -1,4 +1,5 @@
 import { streamText, convertToModelMessages, tool } from 'ai'
+import { google } from '@ai-sdk/google'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { getBuilderSystemPrompt } from '@/lib/orchestrator/system-prompt'
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
   )
 
   const result = streamText({
-    model: 'google/gemini-3-flash-preview',
+    model: google('gemini-3-flash-preview'),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     maxOutputTokens: 4096,

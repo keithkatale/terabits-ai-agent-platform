@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS public.agents (
   category TEXT NOT NULL DEFAULT 'general',
   status TEXT DEFAULT 'draft',
   system_prompt TEXT,
-  model TEXT DEFAULT 'gemini-2.5-pro-preview',
+  model TEXT DEFAULT 'gemini-3-flash-preview',
   settings JSONB DEFAULT '{}',
   deploy_slug TEXT UNIQUE,
   is_deployed BOOLEAN DEFAULT false,
