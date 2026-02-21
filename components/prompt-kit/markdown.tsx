@@ -1,12 +1,12 @@
 'use client'
 
-import { memo, useMemo, useRef } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { marked } from 'marked'
-import { Download } from 'lucide-react'
+import { Download, Link2, Check } from 'lucide-react'
 
 export interface MarkdownProps {
   children: string
@@ -29,7 +29,9 @@ function extractLanguage(className?: string): string {
 // ── Exportable table wrapper ───────────────────────────────────────────────────
 
 function ExportableTable({ children }: { children: React.ReactNode }) {
+  const outerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const [shareCopied, setShareCopied] = useState(false)
 
   const extractData = (): string[][] => {
     const table = wrapperRef.current?.querySelector('table')
@@ -39,6 +41,18 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
         (cell as HTMLElement).innerText.trim()
       )
     )
+  }
+
+  // Walk backwards through preceding siblings to find the nearest heading
+  const extractHeading = (): string | null => {
+    let el = outerRef.current?.previousElementSibling
+    while (el) {
+      if (/^h[1-4]$/i.test(el.tagName)) return el.textContent?.trim() ?? null
+      // Stop if we hit another table or a non-inline element that isn't a heading
+      if (el.tagName === 'TABLE' || el.querySelector('table')) break
+      el = el.previousElementSibling
+    }
+    return null
   }
 
   const downloadCSV = () => {
@@ -66,8 +80,23 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
     XLSX.writeFile(wb, 'table.xlsx')
   }
 
+  const shareTable = async () => {
+    const data = extractData()
+    if (!data.length) return
+    const heading = extractHeading()
+    const payload = JSON.stringify({ heading, data })
+    // UTF-8 safe base64 encoding
+    const bytes = new TextEncoder().encode(payload)
+    const binary = String.fromCharCode(...bytes)
+    const encoded = btoa(binary)
+    const url = `${window.location.origin}/share/table?d=${encoded}`
+    await navigator.clipboard.writeText(url)
+    setShareCopied(true)
+    setTimeout(() => setShareCopied(false), 2500)
+  }
+
   return (
-    <div className="group relative my-4">
+    <div ref={outerRef} className="group relative my-4">
       <div
         data-no-print
         className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
@@ -87,6 +116,14 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
         >
           <Download className="h-2.5 w-2.5" />
           XLSX
+        </button>
+        <button
+          onClick={shareTable}
+          title="Copy shareable link to this table"
+          className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium shadow-sm backdrop-blur-sm transition-colors ${shareCopied ? 'border-green-500/30 bg-green-500/10 text-green-600' : 'border-border bg-background/90 text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        >
+          {shareCopied ? <Check className="h-2.5 w-2.5" /> : <Link2 className="h-2.5 w-2.5" />}
+          {shareCopied ? 'Copied!' : 'Share'}
         </button>
       </div>
       <div ref={wrapperRef} className="overflow-x-auto rounded-lg border border-border">
