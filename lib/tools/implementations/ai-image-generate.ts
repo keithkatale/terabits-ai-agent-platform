@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 export const aiImageGenerate = tool({
   description:
-    'Generate images from text descriptions using Google Gemini 3 Pro Image (Nano Banana Pro). Supports configurable resolutions (512x512, 768x768, 1024x1024). Specify resolution in prompt like "512 image of..." or use default 1024x1024.',
+    'Generate images from text descriptions using Google Gemini 2.5 Flash (image generation). Supports configurable resolutions (512x512, 768x768, 1024x1024). Specify resolution in prompt like "512 image of..." or use default 1024x1024.',
   inputSchema: z.object({
     prompt: z
       .string()
@@ -30,14 +30,14 @@ export const aiImageGenerate = tool({
         finalResolution = `${size}x${size}` as '512x512' | '768x768' | '1024x1024'
       }
 
-      // Call Google Gemini 3 Pro Image API via REST
+      // Call Google Gemini 2.5 Flash Image API (more widely available)
       const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
       if (!apiKey) {
         throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not configured')
       }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateImage?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateImage?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
