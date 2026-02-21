@@ -30,21 +30,29 @@ export const aiImageGenerate = tool({
         finalResolution = `${size}x${size}` as '512x512' | '768x768' | '1024x1024'
       }
 
-      // Call Google Gemini 2.5 Flash Image API (more widely available)
+      // Call Google Gemini 2.5 Flash Image API
       const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
       if (!apiKey) {
         throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not configured')
       }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateImage?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            prompt,
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt,
+                  },
+                ],
+              },
+            ],
           }),
         }
       )
@@ -54,20 +62,31 @@ export const aiImageGenerate = tool({
         throw new Error(`Image generation API error: ${response.status} - ${errorText}`)
       }
 
-      const data = (await response.json()) as { images?: Array<{ image?: string }> }
+      const data = (await response.json()) as {
+        candidates?: Array<{
+          content?: {
+            parts?: Array<{
+              inlineData?: {
+                mimeType?: string
+                data?: string
+              }
+            }>
+          }
+        }>
+      }
 
-      if (!data.images || data.images.length === 0) {
+      if (!data.candidates || data.candidates.length === 0) {
         throw new Error('No images generated from API')
       }
 
-      // Get the first image (base64-encoded)
-      const imageData = data.images[0]
-      if (!imageData.image) {
-        throw new Error('Invalid API response: no image data')
+      // Get the first candidate's image
+      const candidate = data.candidates[0]
+      if (!candidate.content?.parts?.[0]?.inlineData?.data) {
+        throw new Error('Invalid API response: no image data found')
       }
 
-      // The image comes as base64-encoded PNG
-      const imageBuffer = Buffer.from(imageData.image, 'base64')
+      // The image comes as base64-encoded data
+      const imageBuffer = Buffer.from(candidate.content.parts[0].inlineData.data, 'base64')
 
       const fileSizeKb = Math.round(imageBuffer.length / 1024)
 
