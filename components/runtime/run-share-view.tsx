@@ -44,7 +44,7 @@ export function RunShareView({
     <div className="min-h-screen bg-background">
       {/* Top bar */}
       <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-6 py-3">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-3">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary">
             <span className="text-xs font-bold text-primary-foreground">
               {agentName.charAt(0).toUpperCase()}
@@ -91,7 +91,7 @@ export function RunShareView({
       </header>
 
       {/* Output */}
-      <main className="mx-auto max-w-4xl px-6 py-10">
+      <main className="mx-auto max-w-7xl px-6 py-10">
         {/* Meta row */}
         <div className="mb-8 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
           {completedAt && (
@@ -120,7 +120,7 @@ export function RunShareView({
 
       {/* Footer */}
       <footer className="border-t border-border py-6 mt-8">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6">
           <span className="text-xs text-muted-foreground">
             Powered by{' '}
             <a
