@@ -14,7 +14,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/logo.svg" alt="Terabits" width={32} height={32} className="h-8 w-8" />
+            <Image src="/icon-nobg.svg" alt="Terabits" width={32} height={32} priority className="h-8 w-8" />
             <span className="text-lg font-semibold text-foreground">Terabits</span>
           </Link>
 

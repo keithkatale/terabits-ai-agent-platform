@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import {
   Play,
@@ -645,9 +646,14 @@ export function AgentPublicView({
       {/* Header */}
       <header className="shrink-0 border-b border-border bg-card/80 backdrop-blur-sm">
         <div className="flex items-center gap-3 px-6 py-3.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary">
-            <span className="text-sm font-bold text-primary-foreground">{name.charAt(0).toUpperCase()}</span>
-          </div>
+          <Image
+            src="/icon-nobg.svg"
+            alt="Terabits"
+            width={36}
+            height={36}
+            priority
+            className="h-9 w-9 shrink-0"
+          />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold text-foreground">{name}</h1>
             {description && <p className="truncate text-xs text-muted-foreground">{description}</p>}

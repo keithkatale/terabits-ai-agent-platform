@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { RuntimeChat } from '@/components/runtime/runtime-chat'
@@ -40,9 +41,14 @@ export default async function RuntimePage({ params }: { params: Promise<{ slug: 
     <main className="flex min-h-screen flex-col bg-background">
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-            <span className="text-sm font-bold text-primary">T</span>
-          </div>
+          <Image
+            src="/icon-nobg.svg"
+            alt="Terabits"
+            width={32}
+            height={32}
+            priority
+            className="h-8 w-8"
+          />
           <div>
             <h1 className="text-sm font-semibold text-foreground">{agent.name}</h1>
             {agent.description && (

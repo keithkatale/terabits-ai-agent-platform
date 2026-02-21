@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Image from 'next/image'
 import {
   Card,
   CardContent,
@@ -16,9 +17,14 @@ function SignUpPageContent() {
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2">
             <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-foreground">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <span className="text-sm font-bold text-primary-foreground">T</span>
-              </div>
+              <Image
+                src="/icon-nobg.svg"
+                alt="Terabits"
+                width={32}
+                height={32}
+                priority
+                className="h-8 w-8"
+              />
               Terabits
             </Link>
             <p className="text-sm text-muted-foreground">Start building AI employees in minutes</p>

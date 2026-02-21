@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { ChatPanel } from '@/components/agent-builder/chat-panel'
 import { InstructionsPanel } from '@/components/agent-builder/instructions-panel'
@@ -46,9 +47,14 @@ export function AgentBuilder({ agent: initialAgent }: AgentBuilderProps) {
           </Link>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
-              <span className="text-[10px] font-bold text-primary-foreground">T</span>
-            </div>
+            <Image
+              src="/icon-nobg.svg"
+              alt="Terabits"
+              width={24}
+              height={24}
+              priority
+              className="h-6 w-6"
+            />
             <span className="text-sm font-medium text-foreground">{currentAgent.name}</span>
           </div>
           {isReady && (
