@@ -21,8 +21,8 @@ export const metadata: Metadata = {
   title: 'Terabits - Build Your Next AI Employee',
   description: 'Build AI employees through natural conversation. No code, no APIs, no configuration. Just describe what you need and Terabits builds it for you.',
   icons: {
-    icon: '/favicon.svg',
-    apple: '/favicon.svg',
+    icon: '/favicon.png',
+    apple: '/favicon.png',
   },
 }
 
