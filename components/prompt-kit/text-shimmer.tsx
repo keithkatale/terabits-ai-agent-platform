@@ -14,7 +14,7 @@ export function TextShimmer({
   children,
   as: Component = 'span',
   duration = 4,
-  spread = 20,
+  spread = 80,
   className,
 }: TextShimmerProps) {
   return (

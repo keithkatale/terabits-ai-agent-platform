@@ -1,14 +1,14 @@
-// Agent execution API
-// Direct streamText execution — no execution-engine dependency.
-// Uses the agent's instruction_prompt as system prompt + web tools.
+// Public agent execution API — no auth required.
+// Looks up agent by deploy_slug where is_deployed = true.
+// Identical streaming behaviour to /api/agents/[id]/execute but accessible publicly.
 
 import { streamText, tool, stepCountIs } from 'ai'
 import { google } from '@ai-sdk/google'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest } from 'next/server'
 
-// Compact log entry stored alongside run output in the DB
 interface StoredLogEntry {
   kind: string
   summary: string
@@ -29,10 +29,6 @@ function sse(data: object): Uint8Array {
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
 
-/**
- * Web search via Serper.dev.
- * Set SERPER_API_KEY in .env.local — get a free key at https://serper.dev
- */
 const webSearch = tool({
   description:
     'Search the web for up-to-date information. Returns titles, URLs, and snippets.',
@@ -49,8 +45,7 @@ const webSearch = tool({
     const apiKey = process.env.SERPER_API_KEY
     if (!apiKey) {
       return {
-        error:
-          'SERPER_API_KEY is not configured. Add it to .env.local to enable web search.',
+        error: 'SERPER_API_KEY is not configured.',
         results: [],
       }
     }
@@ -82,9 +77,6 @@ const webSearch = tool({
   },
 })
 
-/**
- * Scrape readable text from a URL.
- */
 const webScrape = tool({
   description:
     'Fetch and extract readable text from a webpage. Use after web_search to read full articles.',
@@ -104,7 +96,6 @@ const webScrape = tool({
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
       const html = await res.text()
 
-      // Strip scripts, styles, comments — extract plain text
       let text = html
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
@@ -135,10 +126,7 @@ const webScrape = tool({
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-function buildExecutionSystemPrompt(
-  agentName: string,
-  instructionPrompt: string,
-): string {
+function buildExecutionSystemPrompt(instructionPrompt: string): string {
   return `${instructionPrompt}
 
 ---
@@ -152,19 +140,12 @@ You are running as a live AI agent. You have a maximum of 25 tool-call steps. Fo
 3. **Handle failures gracefully.** If a tool fails, explain the failure, try an alternative approach, and never silently skip required information.
 4. **Write partial results early for large requests.** If the user asks for a large list (20+ items), write your compiled results to the output after every 5–8 searches — do NOT wait until all data is gathered. This prevents silent failure if steps run out.
 5. **Never exhaust all steps on tool calls alone.** Reserve at least 2–3 steps for writing your final output. If you have used 20+ steps and still have data to write, stop searching and write what you have.
-6. **Self-review before finishing.** Before concluding, verify:
-   - Did you actually complete what was requested based on the input?
-   - Is your output grounded in real data, not assumptions?
-   - Are there any gaps or errors in your response?
+6. **Self-review before finishing.** Before concluding, verify the output is grounded in real data, not assumptions.
 7. **End with a status line.** Your very last sentence must be one of:
    - ✅ Task completed successfully.
    - ⚠️ Partial completion — [specific reason/what's missing].
-   - ❌ Task failed — [specific reason why it could not be completed].
-
-Do NOT claim "✅ Task completed" if you encountered blocking errors or could not fulfill the core request.`
+   - ❌ Task failed — [specific reason why it could not be completed].`
 }
-
-// ── Input formatter ───────────────────────────────────────────────────────────
 
 function formatUserInput(input: Record<string, unknown>): string {
   const entries = Object.entries(input).filter(([, v]) => v !== '' && v != null)
@@ -180,19 +161,26 @@ function formatUserInput(input: Record<string, unknown>): string {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ slug: string }> },
 ) {
-  const { id } = await params
+  const { slug } = await params
 
-  // Auth
+  // No auth check — this is a public endpoint for deployed agents.
   const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
 
-  if (authError || !user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: agent, error: agentError } = await supabase
+    .from('agents')
+    .select('id, name, instruction_prompt, tool_config')
+    .eq('deploy_slug', slug)
+    .eq('is_deployed', true)
+    .single()
+
+  if (agentError || !agent) {
+    return Response.json({ error: 'Agent not found or not deployed' }, { status: 404 })
+  }
+
+  if (!agent.instruction_prompt) {
+    return Response.json({ error: 'Agent has no instructions' }, { status: 400 })
   }
 
   // Parse body
@@ -208,25 +196,7 @@ export async function POST(
     return Response.json({ error: 'input must be an object' }, { status: 400 })
   }
 
-  // Load agent
-  const { data: agent, error: agentError } = await supabase
-    .from('agents')
-    .select('name, instruction_prompt, tool_config')
-    .eq('id', id)
-    .single()
-
-  if (agentError || !agent) {
-    return Response.json({ error: 'Agent not found' }, { status: 404 })
-  }
-
-  if (!agent.instruction_prompt) {
-    return Response.json(
-      { error: 'Agent has no instructions — build it first in the chat panel.' },
-      { status: 400 },
-    )
-  }
-
-  // Decide which tools to give based on tool_config
+  // Tools
   const toolConfig = (agent.tool_config ?? {}) as Record<string, { enabled?: boolean }>
   const searchEnabled = toolConfig['web_search']?.enabled !== false
   const scrapeEnabled =
@@ -236,32 +206,36 @@ export async function POST(
   if (searchEnabled) tools.web_search = webSearch
   if (scrapeEnabled) tools.web_scrape = webScrape
 
-  const systemPrompt = buildExecutionSystemPrompt(agent.name, agent.instruction_prompt)
+  const systemPrompt = buildExecutionSystemPrompt(agent.instruction_prompt)
   const userMessage = formatUserInput(input as Record<string, unknown>)
 
-  // Create an execution_log row before streaming so we have an ID to update later
+  // Persist run — use admin client to bypass RLS (no auth for public endpoint)
+  const adminDb = createAdminClient()
   const runStartedAt = new Date().toISOString()
   const sessionId = crypto.randomUUID()
-  const { data: runLog } = await supabase
-    .from('execution_logs')
-    .insert({
-      agent_id: id,
-      session_id: sessionId,
-      lane: 'execute',
-      status: 'running',
-      input: input,
-      started_at: runStartedAt,
-    })
-    .select('id')
-    .single()
+  let runLogId: string | null = null
+  if (adminDb) {
+    const { data: runLog } = await adminDb
+      .from('execution_logs')
+      .insert({
+        agent_id: agent.id,
+        session_id: sessionId,
+        lane: 'public-execute',
+        status: 'running',
+        input: input,
+        started_at: runStartedAt,
+      })
+      .select('id')
+      .single()
+    runLogId = runLog?.id ?? null
+  }
 
   // Stream SSE
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: object) => controller.enqueue(sse(data))
 
-      // Announce start — include the run ID so the client can reference it
-      send({ type: 'start', agentName: agent.name, runId: runLog?.id, timestamp: Date.now() })
+      send({ type: 'start', agentName: agent.name, runId: runLogId, timestamp: Date.now() })
 
       try {
         const result = streamText({
@@ -288,19 +262,13 @@ export async function POST(
         let lastUsage: { totalTokens?: number } | undefined
         const storedLogs: StoredLogEntry[] = []
 
-        // Use `as any` to handle SDK v6 runtime field names that differ from typings
-        // (textDelta vs text, input vs args, output vs result, reasoning part not in union)
         for await (const part of result.fullStream) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const p = part as any
           const kind: string = p.type
 
           if (kind === 'reasoning') {
-            send({
-              type: 'reasoning',
-              delta: p.textDelta ?? p.text ?? '',
-              timestamp: Date.now(),
-            })
+            send({ type: 'reasoning', delta: p.textDelta ?? p.text ?? '', timestamp: Date.now() })
           } else if (kind === 'text-delta') {
             const delta: string = p.textDelta ?? p.text ?? ''
             finalText += delta
@@ -308,65 +276,35 @@ export async function POST(
           } else if (kind === 'tool-call') {
             const toolInput = p.input ?? p.args
             storedLogs.push({ kind: 'tool_start', summary: `${p.toolName}: ${JSON.stringify(toolInput).slice(0, 120)}`, ts: Date.now() })
-            send({
-              type: 'tool',
-              tool: p.toolName,
-              status: 'running',
-              input: toolInput,
-              stepIndex,
-              timestamp: Date.now(),
-            })
+            send({ type: 'tool', tool: p.toolName, status: 'running', input: toolInput, stepIndex, timestamp: Date.now() })
           } else if (kind === 'tool-result') {
             stepIndex++
             totalStepsUsed = stepIndex
             storedLogs.push({ kind: 'tool_end', summary: `${p.toolName} → ${JSON.stringify(p.output ?? p.result).slice(0, 120)}`, ts: Date.now() })
-            send({
-              type: 'tool',
-              tool: p.toolName,
-              status: 'completed',
-              input: p.input ?? p.args,
-              output: p.output ?? p.result,
-              stepIndex,
-              timestamp: Date.now(),
-            })
+            send({ type: 'tool', tool: p.toolName, status: 'completed', input: p.input ?? p.args, output: p.output ?? p.result, stepIndex, timestamp: Date.now() })
           } else if (kind === 'error') {
             const errMsg = String(p.error ?? 'Stream error')
             storedLogs.push({ kind: 'error', summary: errMsg, ts: Date.now() })
-            send({
-              type: 'error',
-              error: errMsg,
-              timestamp: Date.now(),
-            })
+            send({ type: 'error', error: errMsg, timestamp: Date.now() })
           } else if (kind === 'finish') {
             lastFinishReason = p.finishReason ?? ''
             lastUsage = p.usage
-            send({
-              type: 'finish',
-              finishReason: p.finishReason,
-              usage: p.usage,
-              timestamp: Date.now(),
-            })
+            send({ type: 'finish', finishReason: p.finishReason, usage: p.usage, timestamp: Date.now() })
           }
         }
 
-        // If the model ran out of steps while still calling tools and produced no text output,
-        // surface a clear error instead of a blank result.
         let runError: string | null = null
         if (lastFinishReason === 'tool-calls' && !finalText.trim()) {
-          runError = `Step limit reached after ${totalStepsUsed} tool calls. The agent spent all available steps gathering data and had no steps left to write output. Try requesting fewer items (e.g. "top 20" instead of a large number), or break the request into smaller batches.`
+          runError = `Step limit reached after ${totalStepsUsed} tool calls. Try requesting fewer items or break the request into smaller batches.`
           storedLogs.push({ kind: 'error', summary: runError, ts: Date.now() })
           send({ type: 'error', error: runError, timestamp: Date.now() })
         } else {
-          send({
-            type: 'complete',
-            result: { output: { result: finalText } },
-            timestamp: Date.now(),
-          })
+          send({ type: 'complete', result: { output: { result: finalText } }, timestamp: Date.now() })
         }
 
-        // Persist run to execution_logs
-        if (runLog?.id) {
-          await supabase
+        // Persist run result
+        if (adminDb && runLogId) {
+          await adminDb
             .from('execution_logs')
             .update({
               status: runError ? 'error' : 'completed',
@@ -379,17 +317,17 @@ export async function POST(
               error: runError,
               completed_at: new Date().toISOString(),
             })
-            .eq('id', runLog.id)
+            .eq('id', runLogId)
         }
       } catch (e) {
-        console.error('Agent execution stream error:', e)
+        console.error('Public agent execution error:', e)
         const errMsg = e instanceof Error ? e.message : 'Agent execution failed'
         send({ type: 'error', error: errMsg, timestamp: Date.now() })
-        if (runLog?.id) {
-          await supabase
+        if (adminDb && runLogId) {
+          await adminDb
             .from('execution_logs')
             .update({ status: 'error', error: errMsg, completed_at: new Date().toISOString() })
-            .eq('id', runLog.id)
+            .eq('id', runLogId)
         }
       } finally {
         controller.close()

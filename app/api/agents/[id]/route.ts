@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -13,7 +13,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const agentId = params.id
+    const { id: agentId } = await params
 
     // Verify ownership
     const { data: agent } = await supabase
@@ -46,7 +46,7 @@ export async function DELETE(
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -56,7 +56,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const agentId = params.id
+    const { id: agentId } = await params
     const body = await req.json()
 
     // Verify ownership

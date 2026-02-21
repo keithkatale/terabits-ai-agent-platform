@@ -1,47 +1,28 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type { UIMessage } from 'ai'
 import { Button } from '@/components/ui/button'
-import { ArrowUp, Sparkles } from 'lucide-react'
+import { ArrowUp, Sparkles, Brain, ChevronDown, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import { ThinkingBar } from '@/components/prompt-kit/thinking-bar'
 import { ToolCall } from '@/components/prompt-kit/tool-call'
-import { FeedbackBar } from '@/components/prompt-kit/feedback-bar'
-import { PlanArtifact } from '@/components/agent-builder/plan-artifact'
-import type { Agent, AgentSkill } from '@/lib/types'
-import type { AgentPlanArtifact } from '@/lib/types/artifact'
-import type { Node, Edge } from '@xyflow/react'
+import type { Agent } from '@/lib/types'
 
-// Tool name to friendly label mapping
 const TOOL_LABELS: Record<string, string> = {
-  present_plan: 'Presenting plan for review',
-  updateAgent: 'Updating agent configuration',
-  addCanvasNode: 'Adding workflow node',
-  addCanvasEdge: 'Connecting workflow nodes',
-  updateCanvasNode: 'Updating node configuration',
-  inspectCanvas: 'Verifying workflow structure',
-  generateInstructions: 'Generating execution instructions',
-  checkPlatformCapabilities: 'Checking platform capabilities',
+  saveInstructions: 'Writing agent instructions',
 }
 
 interface ChatPanelProps {
   agent: Agent
-  onWorkflowUpdate: (data: {
-    nodes?: Node[]
-    edges?: Edge[]
-    skills?: AgentSkill[]
-    agentUpdate?: Partial<Agent>
-  }) => void
-  onAddNode: (node: Node) => void
-  onAddEdge: (edge: Edge) => void
-  onUpdateNode: (id: string, updates: Record<string, unknown>) => void
+  onAgentUpdate: (updates: Partial<Agent>) => void
   isFullWidth: boolean
 }
 
+// Extract tool invocation from a message part
 function getToolInvocation(part: unknown): {
   toolName: string
   toolCallId: string
@@ -51,7 +32,7 @@ function getToolInvocation(part: unknown): {
 } | null {
   if (!part || typeof part !== 'object') return null
   const p = part as Record<string, unknown>
-  
+
   if (p.toolInvocation && typeof p.toolInvocation === 'object') {
     const inv = p.toolInvocation as Record<string, unknown>
     return {
@@ -62,33 +43,61 @@ function getToolInvocation(part: unknown): {
       output: inv.output ?? inv.result,
     }
   }
-  
-  if (typeof p.type === 'string' && p.type.startsWith('tool-') && p.type !== 'tool-invocation') {
-    return {
-      toolName: p.type.replace('tool-', ''),
-      toolCallId: String(p.toolCallId ?? ''),
-      state: String(p.state ?? 'unknown'),
-      input: p.input,
-      output: p.output,
+
+  if (typeof p.type === 'string' && p.type === 'tool-invocation') {
+    const inv = p.toolInvocation as Record<string, unknown> | undefined
+    if (inv) {
+      return {
+        toolName: String(inv.toolName ?? ''),
+        toolCallId: String(inv.toolCallId ?? ''),
+        state: String(inv.state ?? 'unknown'),
+        input: inv.input ?? inv.args,
+        output: inv.output ?? inv.result,
+      }
     }
   }
-  
+
   return null
 }
 
-function isToolPart(part: unknown): boolean {
-  if (!part || typeof part !== 'object') return false
-  const p = part as Record<string, unknown>
-  return p.type === 'tool-invocation' || (typeof p.type === 'string' && p.type.startsWith('tool-'))
+// Collapsible reasoning block for Gemini thinking tokens
+function ReasoningBlock({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+  const [open, setOpen] = useState(isStreaming)
+
+  useEffect(() => {
+    setOpen(isStreaming)
+  }, [isStreaming])
+
+  if (!text) return null
+
+  return (
+    <div className="rounded-lg border border-border/50 bg-muted/20 text-xs">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Brain className="h-3 w-3 shrink-0" />
+        <span className="font-medium">Reasoning</span>
+        {isStreaming && (
+          <span className="ml-1 h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+        )}
+        <span className="ml-auto">
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-border/40 px-3 py-2.5 text-muted-foreground/70 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto font-mono text-[11px]">
+          {text}
+        </div>
+      )}
+    </div>
+  )
 }
 
-export function ChatPanel({ agent, onWorkflowUpdate, onAddNode, onAddEdge, onUpdateNode, isFullWidth }: ChatPanelProps) {
-  const [currentPlan, setCurrentPlan] = useState<AgentPlanArtifact | null>(null)
-  const [isApprovingPlan, setIsApprovingPlan] = useState(false)
+export function ChatPanel({ agent, onAgentUpdate, isFullWidth }: ChatPanelProps) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const initialPromptSent = useRef(false)
   const processedToolCalls = useRef<Set<string>>(new Set())
   const messagesLoadedRef = useRef(false)
@@ -98,113 +107,103 @@ export function ChatPanel({ agent, onWorkflowUpdate, onAddNode, onAddEdge, onUpd
       new DefaultChatTransport({
         api: '/api/agent-builder',
         prepareSendMessagesRequest: ({ id, messages: msgs }) => ({
-          body: { 
-            id, 
+          body: {
+            id,
             messages: msgs,
             agentId: agent.id,
-            agentPhase: agent.conversation_phase,
             agentName: agent.name,
             agentCategory: agent.category,
           },
         }),
       }),
-    [agent.id, agent.conversation_phase, agent.name, agent.category]
+    [agent.id, agent.name, agent.category],
   )
 
   const { messages, sendMessage, status, setMessages } = useChat({ transport })
 
-  // Load existing messages on mount
+  const prevStatusRef = useRef(status)
+
+  // ── Load messages from DB on mount ──────────────────────────────────────────
   useEffect(() => {
     if (messagesLoadedRef.current) return
-    
-    const loadMessages = async () => {
+
+    const load = async () => {
       const supabase = createClient()
       const { data } = await supabase
         .from('messages')
-        .select('*')
+        .select('id, role, content')
         .eq('agent_id', agent.id)
         .eq('message_type', 'builder')
         .order('created_at', { ascending: true })
         .limit(50)
 
       if (data && data.length > 0) {
-        // Convert to AI SDK UIMessage format
         const uiMessages: UIMessage[] = data.map((msg) => ({
           id: msg.id,
           role: msg.role as 'user' | 'assistant',
-          parts: [
-            {
-              type: 'text' as const,
-              text: msg.content,
-            },
-          ],
+          parts: [{ type: 'text' as const, text: msg.content }],
         }))
         setMessages(uiMessages)
         messagesLoadedRef.current = true
       }
     }
-    
+
     if (messages.length === 0 && status === 'ready') {
-      loadMessages()
+      load()
     }
   }, [agent.id, messages.length, status, setMessages])
 
-  // Save assistant messages to database
+  // ── Save assistant messages to DB ───────────────────────────────────────────
   useEffect(() => {
-    const saveAssistantMessages = async () => {
+    if (status !== 'ready' || messages.length === 0) return
+
+    const save = async () => {
       const supabase = createClient()
-      
-      // Find assistant messages that haven't been saved yet
+
       for (const message of messages) {
         if (message.role !== 'assistant') continue
-        
-        // Extract text content from parts
-        const parts = message.parts ?? []
-        const textContent = parts
-          .filter((p): p is { type: 'text'; text: string } => (p as Record<string, unknown>).type === 'text')
-          .map((p) => p.text)
+
+        const text = (message.parts ?? [])
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text)
           .join('')
-        
-        if (!textContent) continue
-        
-        // Check if this message is already in the database
+
+        if (!text) continue
+
+        // Skip if already saved
         const { data: existing } = await supabase
           .from('messages')
           .select('id')
           .eq('agent_id', agent.id)
           .eq('role', 'assistant')
-          .eq('content', textContent)
+          .eq('content', text)
           .eq('message_type', 'builder')
           .single()
-        
-        // If not in database, save it
+
         if (!existing) {
           await supabase.from('messages').insert({
             agent_id: agent.id,
             role: 'assistant',
-            content: textContent,
+            content: text,
             message_type: 'builder',
             metadata: {},
           })
         }
       }
     }
-    
-    // Only save when status is ready (message complete)
-    if (status === 'ready' && messages.length > 0) {
-      saveAssistantMessages()
-    }
+
+    save()
   }, [messages, status, agent.id])
 
-  // Process tool outputs to update canvas
+  // ── Process tool results ─────────────────────────────────────────────────────
   useEffect(() => {
     for (const message of messages) {
       if (message.role !== 'assistant' || !message.parts) continue
-      
+
       for (const part of message.parts) {
         const inv = getToolInvocation(part)
         if (!inv || inv.state !== 'output-available') continue
-        
+
         const callId = inv.toolCallId
         if (!callId || processedToolCalls.current.has(callId)) continue
         processedToolCalls.current.add(callId)
@@ -218,178 +217,96 @@ export function ChatPanel({ agent, onWorkflowUpdate, onAddNode, onAddEdge, onUpd
           continue
         }
 
-        const action = out.__canvasAction as string | undefined
-
-        // Handle canvas actions (like industry platform)
-        if (action === 'addNode' || inv.toolName === 'addCanvasNode') {
-          const pos = out.position as Record<string, unknown> | undefined
-          onAddNode({
-            id: String(out.id ?? `auto-${Date.now()}`),
-            type: 'agentNode',
-            position: { x: Number(pos?.x ?? 0), y: Number(pos?.y ?? 0) },
-            data: (out.data as Record<string, unknown>) ?? {},
-          })
-        }
-        if (action === 'addEdge' || inv.toolName === 'addCanvasEdge') {
-          onAddEdge({
-            id: String(out.id ?? `edge-${out.source}-${out.target}`),
-            source: String(out.source),
-            target: String(out.target),
-            ...(out.label ? { label: String(out.label) } : {}),
-            animated: true,
-          })
-        }
-        if (action === 'updateNode' || inv.toolName === 'updateCanvasNode') {
-          onUpdateNode(String(out.id), (out.updates as Record<string, unknown>) ?? {})
-        }
-        
-        // Handle plan artifact
-        if (out.__artifactAction === 'presentPlan' && out.artifact) {
-          setCurrentPlan(out.artifact as AgentPlanArtifact)
+        // saveInstructions succeeded — push updates to parent
+        if (inv.toolName === 'saveInstructions' && out.success && out.__agentUpdate) {
+          onAgentUpdate(out.__agentUpdate as Partial<Agent>)
         }
       }
     }
-  }, [messages, onWorkflowUpdate, onAddNode, onAddEdge, onUpdateNode])
+  }, [messages, onAgentUpdate])
 
-  const refreshWorkflow = useCallback(async () => {
-    const supabase = createClient()
-    const [{ data: nodes }, { data: edges }, { data: skills }, { data: agentData }] = await Promise.all([
-      supabase.from('workflow_nodes').select('*').eq('agent_id', agent.id),
-      supabase.from('workflow_edges').select('*').eq('agent_id', agent.id),
-      supabase.from('agent_skills').select('*').eq('agent_id', agent.id),
-      supabase.from('agents').select('*').eq('id', agent.id).single(),
-    ])
+  // ── Refresh agent from DB after streaming completes ──────────────────────────
+  useEffect(() => {
+    const wasWorking =
+      prevStatusRef.current === 'streaming' || prevStatusRef.current === 'submitted'
+    const isNowReady = status === 'ready'
+    prevStatusRef.current = status
 
-    const flowNodes: Node[] = (nodes ?? []).map((n) => ({
-      id: n.node_id,
-      type: n.node_type,
-      position: { x: n.position_x, y: n.position_y },
-      data: { label: n.label, ...n.data },
-    }))
+    if (wasWorking && isNowReady) {
+      const refresh = async () => {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('agents')
+          .select(
+            'name, description, category, instruction_prompt, execution_context, tool_config, status, conversation_phase',
+          )
+          .eq('id', agent.id)
+          .single()
+        if (data) onAgentUpdate(data)
+      }
+      refresh()
+    }
+  }, [status, agent.id, onAgentUpdate])
 
-    const flowEdges: Edge[] = (edges ?? []).map((e) => ({
-      id: e.edge_id,
-      source: e.source_node_id,
-      target: e.target_node_id,
-      label: e.label ?? undefined,
-      type: e.edge_type ?? 'smoothstep',
-      animated: true,
-    }))
-
-    onWorkflowUpdate({
-      nodes: flowNodes.length > 0 ? flowNodes : undefined,
-      edges: flowEdges.length > 0 ? flowEdges : undefined,
-      skills: skills ?? undefined,
-      agentUpdate: agentData ?? undefined,
-    })
-  }, [agent.id, onWorkflowUpdate])
-
-  // Auto-send initial prompt from landing page
+  // ── Auto-send initial prompt from landing page ───────────────────────────────
   useEffect(() => {
     if (initialPromptSent.current) return
-    const storedPrompt = sessionStorage.getItem('terabits_initial_prompt')
-    if (storedPrompt && messages.length === 0 && status === 'ready') {
+    const stored = sessionStorage.getItem('terabits_initial_prompt')
+    if (stored && messages.length === 0 && status === 'ready') {
       initialPromptSent.current = true
       sessionStorage.removeItem('terabits_initial_prompt')
-      
-      sendMessage({ text: storedPrompt })
+      sendMessage({ text: stored })
     }
   }, [messages.length, status, sendMessage])
 
+  // ── Scroll to bottom ─────────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Auto-resize textarea
+  // ── Auto-resize textarea ─────────────────────────────────────────────────────
   useEffect(() => {
-    const textarea = textareaRef.current
-    if (textarea) {
-      textarea.style.height = 'auto'
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
+    const t = textareaRef.current
+    if (t) {
+      t.style.height = 'auto'
+      t.style.height = `${Math.min(t.scrollHeight, 160)}px`
     }
   }, [inputValue])
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
+  // ── Submit handler ───────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inputValue.trim() || status !== 'ready') return
-    
-    const messageContent = inputValue
-    setInputValue('') // Clear input immediately
-    
-    // Save user message to database
-    const supabase = createClient()
-    await supabase.from('messages').insert({
-      agent_id: agent.id,
-      role: 'user',
-      content: messageContent,
-      message_type: 'builder',
-      metadata: {},
-    })
-    
-    // Send message using AI SDK
-    sendMessage({ text: messageContent })
-    
-    // Refresh workflow after sending
-    setTimeout(() => refreshWorkflow(), 1000)
-  }
 
-  const handlePlanApprove = async () => {
-    if (!currentPlan) return
-    setIsApprovingPlan(true)
-    setCurrentPlan(null)
-    
-    // Save user message to database
-    const supabase = createClient()
-    await supabase.from('messages').insert({
-      agent_id: agent.id,
-      role: 'user',
-      content: 'I approve this plan. Please start building.',
-      message_type: 'builder',
-      metadata: {},
-    })
-    
-    sendMessage({ text: 'I approve this plan. Please start building.' })
-    setIsApprovingPlan(false)
-  }
+    const text = inputValue
+    setInputValue('')
 
-  const handlePlanReject = async (feedback?: string) => {
-    if (!currentPlan) return
-    const message = feedback 
-      ? `I'd like to make some changes: ${feedback}`
-      : 'I\'d like to make some changes to this plan.'
-    
-    setCurrentPlan(null)
-    
-    // Save user message to database
     const supabase = createClient()
     await supabase.from('messages').insert({
       agent_id: agent.id,
       role: 'user',
-      content: message,
+      content: text,
       message_type: 'builder',
       metadata: {},
     })
-    
-    sendMessage({ text: message })
+
+    sendMessage({ text })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleFormSubmit(e as any)
+      handleSubmit(e as unknown as React.FormEvent)
     }
   }
 
-  const containerClass = isFullWidth
-    ? 'mx-auto w-full max-w-2xl px-4 lg:px-0'
-    : 'w-full px-4'
-
+  const containerClass = isFullWidth ? 'mx-auto w-full max-w-2xl px-4' : 'w-full px-4'
   const isWorking = status === 'submitted' || status === 'streaming'
 
   return (
     <div className="relative flex h-full flex-col">
-      {/* Messages area */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-36">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto pb-36">
         {messages.length === 0 ? (
           /* Empty state */
           <div className="flex h-full flex-col items-center justify-center px-4">
@@ -399,32 +316,26 @@ export function ChatPanel({ agent, onWorkflowUpdate, onAddNode, onAddEdge, onUpd
                   <Sparkles className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-foreground text-balance">
-                    What role do you need filled?
+                  <h2 className="text-xl font-semibold text-foreground">
+                    What should your agent do?
                   </h2>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    Describe the AI employee you want to hire. I'll ask questions to understand exactly what you need, then build it for you.
+                    Describe the task and I'll write the instructions that power it.
                   </p>
                 </div>
-
-                {/* Suggestion chips */}
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {[
                     'Customer support agent for my online store',
                     'Weekly content writer for social media',
-                    'Data analysis assistant for sales reports',
-                    'Task automation bot for invoice processing',
-                  ].map((suggestion) => (
+                    'Research assistant that summarises articles',
+                    'Invoice processing automation',
+                  ].map((s) => (
                     <button
-                      key={suggestion}
-                      onClick={() => {
-                        setInputValue(suggestion)
-                        const form = document.querySelector('form')
-                        if (form) form.requestSubmit()
-                      }}
+                      key={s}
+                      onClick={() => setInputValue(s)}
                       className="rounded-full border border-border bg-card px-3.5 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground"
                     >
-                      {suggestion}
+                      {s}
                     </button>
                   ))}
                 </div>
@@ -432,92 +343,74 @@ export function ChatPanel({ agent, onWorkflowUpdate, onAddNode, onAddEdge, onUpd
             </div>
           </div>
         ) : (
-          /* Messages list */
           <div className={`py-6 ${containerClass}`}>
             <div className="space-y-5">
-              {messages.map((message: UIMessage, messageIndex: number) => {
+              {messages.map((message: UIMessage) => {
                 // User message
                 if (message.role === 'user') {
-                  const parts = message.parts ?? []
-                  const textContent = parts
-                    .filter((p): p is { type: 'text'; text: string } => (p as Record<string, unknown>).type === 'text')
-                    .map((p) => p.text)
+                  const text = (message.parts ?? [])
+                    .filter((p: any) => p.type === 'text')
+                    .map((p: any) => p.text)
                     .join('')
-                  
                   return (
                     <div key={message.id} className="flex justify-end">
                       <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground">
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{textContent}</p>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
                       </div>
                     </div>
                   )
                 }
 
                 // Assistant message
-                const isLastAssistant = messageIndex === messages.length - 1 && message.role === 'assistant'
-                const shouldShowPlan = isLastAssistant && currentPlan !== null
                 const parts = message.parts ?? []
-                const toolInvocations = parts.filter(isToolPart)
-
                 return (
                   <div key={message.id} className="flex gap-3">
-                    {/* Avatar */}
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 mt-0.5">
                       <span className="text-[10px] font-bold text-primary">T</span>
                     </div>
-
-                    {/* Message content */}
                     <div className="min-w-0 flex-1 space-y-2.5">
-                      {/* Tool invocations */}
-                      {toolInvocations.map((part: unknown, i: number) => {
-                        const inv = getToolInvocation(part)
-                        if (!inv) return null
-                        
-                        // Skip rendering present_plan tool calls (shown as artifact instead)
-                        if (inv.toolName === 'present_plan') return null
-
-                        const toolState = inv.state === 'output-available' ? 'completed'
-                          : inv.state === 'input-streaming' || inv.state === 'input-available' ? 'running'
-                          : inv.state === 'output-error' ? 'error'
-                          : 'pending'
-
-                        return (
-                          <ToolCall
-                            key={`${message.id}-tool-${i}`}
-                            name={TOOL_LABELS[inv.toolName] ?? inv.toolName}
-                            state={toolState as 'pending' | 'running' | 'completed' | 'error'}
-                            input={inv.input as Record<string, unknown> | undefined}
-                            output={inv.output ? { result: inv.output } : undefined}
-                            defaultOpen={false}
-                          />
-                        )
-                      })}
-
-                      {/* Plan artifact (if present and is last message) */}
-                      {shouldShowPlan && (
-                        <PlanArtifact
-                          plan={currentPlan}
-                          onApprove={handlePlanApprove}
-                          onReject={handlePlanReject}
-                          isProcessing={isApprovingPlan}
-                        />
-                      )}
-
-                      {/* Text content with Markdown rendering */}
-                      {parts.map((part, pi) => {
-                        const pp = part as Record<string, unknown>
-                        if (pp.type === 'text' && pp.text) {
-                          return <Markdown key={pi} id={`${message.id}-${pi}`}>{String(pp.text)}</Markdown>
+                      {parts.map((part: any, i: number) => {
+                        // Reasoning tokens
+                        if (part.type === 'reasoning') {
+                          return (
+                            <ReasoningBlock
+                              key={i}
+                              text={String(part.reasoning ?? part.text ?? '')}
+                              isStreaming={isWorking && i === parts.length - 1}
+                            />
+                          )
                         }
+
+                        // Tool invocations
+                        const inv = getToolInvocation(part)
+                        if (inv) {
+                          const toolState =
+                            inv.state === 'output-available'
+                              ? 'completed'
+                              : inv.state === 'output-error'
+                                ? 'error'
+                                : 'running'
+                          return (
+                            <ToolCall
+                              key={i}
+                              name={TOOL_LABELS[inv.toolName] ?? inv.toolName}
+                              state={toolState as 'pending' | 'running' | 'completed' | 'error'}
+                              defaultOpen={false}
+                            />
+                          )
+                        }
+
+                        // Text
+                        if (part.type === 'text' && part.text) {
+                          return (
+                            <Markdown key={i} id={`${message.id}-${i}`}>
+                              {String(part.text)}
+                            </Markdown>
+                          )
+                        }
+
                         return null
                       })}
-
-                      {/* Feedback bar */}
-                      {!isWorking && parts.some((p) => (p as Record<string, unknown>).type === 'text') && !shouldShowPlan && (
-                        <FeedbackBar messageContent={
-                          String((parts.find((p) => (p as Record<string, unknown>).type === 'text') as Record<string, unknown> | undefined)?.text || '')
-                        } />
-                      )}
                     </div>
                   </div>
                 )
@@ -530,7 +423,7 @@ export function ChatPanel({ agent, onWorkflowUpdate, onAddNode, onAddEdge, onUpd
                     <span className="text-[10px] font-bold text-primary">T</span>
                   </div>
                   <div className="flex-1">
-                    <ThinkingBar text="Terabits is thinking" />
+                    <ThinkingBar text="Working on your agent" />
                   </div>
                 </div>
               )}
@@ -543,22 +436,20 @@ export function ChatPanel({ agent, onWorkflowUpdate, onAddNode, onAddEdge, onUpd
       {/* Floating input */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center pb-3">
         <div className={`pointer-events-auto w-full ${containerClass}`}>
-          <form onSubmit={handleFormSubmit}>
-            <div className="relative rounded-2xl border border-border bg-card shadow-lg backdrop-blur-sm transition-all focus-within:shadow-xl focus-within:border-primary/30">
+          <form onSubmit={handleSubmit}>
+            <div className="relative rounded-2xl border border-border bg-card shadow-lg backdrop-blur-sm transition-all focus-within:border-primary/30 focus-within:shadow-xl">
               <textarea
                 ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Describe what your AI employee should do..."
+                placeholder="Describe what your agent should do..."
                 disabled={status !== 'ready'}
                 rows={1}
                 className="w-full resize-none rounded-2xl bg-transparent px-4 pt-3.5 pb-12 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
               />
               <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground/40">
-                  Gemini 3 Flash
-                </span>
+                <span className="text-[11px] text-muted-foreground/40">Gemini 3 Flash</span>
                 <Button
                   type="submit"
                   size="icon"

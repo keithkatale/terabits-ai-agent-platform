@@ -27,7 +27,7 @@ export interface MCPServerConfig {
 }
 
 export interface ExecutionEvent {
-  type: 'lifecycle' | 'assistant' | 'tool' | 'error'
+  type: 'lifecycle' | 'assistant' | 'reasoning' | 'tool' | 'error'
   phase?: 'start' | 'end'
   delta?: string
   tool?: string

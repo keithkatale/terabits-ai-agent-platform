@@ -22,6 +22,9 @@ export interface Agent {
   conversation_phase: 'discovery' | 'planning' | 'building' | 'refining' | 'testing' | 'complete'
   capabilities: string[]
   limitations: string[]
+  instruction_prompt?: string | null
+  tool_config?: Record<string, unknown>
+  execution_context?: Record<string, unknown>
   created_at: string
   updated_at: string
 }

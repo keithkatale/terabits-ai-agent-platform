@@ -32,9 +32,9 @@ export async function POST(
     return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
   }
 
-  if (!agent.system_prompt) {
+  if (!agent.instruction_prompt) {
     return NextResponse.json(
-      { error: 'Agent must have a system prompt before deploying. Complete the building process first.' },
+      { error: 'Agent must have instructions before deploying. Complete the building process first.' },
       { status: 400 }
     )
   }
@@ -67,7 +67,7 @@ export async function POST(
   return NextResponse.json({
     success: true,
     deploy_slug: slug,
-    url: `/run/${slug}`,
+    url: `/${slug}`,
   })
 }
 

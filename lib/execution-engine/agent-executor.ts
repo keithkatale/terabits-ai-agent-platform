@@ -172,6 +172,7 @@ async function executeWithAI(params: {
 }> {
   const toolCalls: ToolCall[] = []
   let tokensUsed = 0
+  let fullText = ''
 
   const result = await streamText({
     model: google(params.model),
@@ -185,21 +186,77 @@ async function executeWithAI(params: {
     tools: params.tools,
     maxTokens: 8192,
     temperature: 0.7,
+    providerOptions: {
+      google: {
+        thinkingConfig: {
+          thinkingBudget: -1,  // Dynamic — model decides how much to think
+          includeThoughts: true,
+        },
+      },
+    },
     onFinish: (event) => {
       tokensUsed = event.usage?.totalTokens || 0
     },
   })
 
-  let fullText = ''
+  // Stream everything: reasoning, text deltas, tool calls, tool results
+  for await (const part of result.fullStream) {
+    switch (part.type) {
+      case 'reasoning':
+        emitEvent(params.onStream, {
+          type: 'reasoning',
+          delta: (part as any).textDelta || '',
+          timestamp: new Date(),
+        })
+        break
 
-  // Stream the response
-  for await (const chunk of result.textStream) {
-    fullText += chunk
-    emitEvent(params.onStream, {
-      type: 'assistant',
-      delta: chunk,
-      timestamp: new Date(),
-    })
+      case 'text-delta':
+        const delta = part.textDelta || ''
+        fullText += delta
+        emitEvent(params.onStream, {
+          type: 'assistant',
+          delta: delta,
+          timestamp: new Date(),
+        })
+        break
+
+      case 'tool-call':
+        emitEvent(params.onStream, {
+          type: 'tool',
+          status: 'running',
+          tool: part.toolName,
+          input: part.args,
+          timestamp: new Date(),
+        })
+        break
+
+      case 'tool-result':
+        const tc: ToolCall = {
+          tool: part.toolName,
+          input: part.args,
+          output: part.result,
+          status: 'completed',
+          timestamp: new Date(),
+        }
+        toolCalls.push(tc)
+        emitEvent(params.onStream, {
+          type: 'tool',
+          status: 'completed',
+          tool: part.toolName,
+          input: part.args,
+          output: part.result,
+          timestamp: new Date(),
+        })
+        break
+
+      case 'error':
+        emitEvent(params.onStream, {
+          type: 'error',
+          error: String(part.error),
+          timestamp: new Date(),
+        })
+        break
+    }
   }
 
   // Parse output from final text
