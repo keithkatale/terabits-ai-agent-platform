@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowUp, Briefcase, MessageSquare, BarChart3, Clock, Search, Sparkles } from 'lucide-react'
+import { ArrowUp, Briefcase, MessageSquare, BarChart3, Clock, Search, Sparkles, Loader2 } from 'lucide-react'
+import RotatingText from '@/components/ui/rotating-text'
 
 const suggestions = [
   {
@@ -58,15 +59,39 @@ export function HeroSection() {
     <section className="flex min-h-[calc(100svh-4rem)] flex-col items-center justify-center px-4 py-16 md:px-6">
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center">
         {/* Badge */}
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5">
+        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-medium text-muted-foreground">AI Employees</span>
+          <span className="text-xs font-medium text-muted-foreground">AI Agents</span>
         </div>
 
         {/* Headline */}
-        <h1 className="text-balance text-center text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl">
-          Hire your next
-          <span className="text-primary">{' AI employee'}</span>
+        <h1 className="font-serif text-center text-5xl font-bold tracking-tight text-foreground md:text-6xl md:whitespace-nowrap lg:text-7xl leading-[1.15]">
+          Build your next{' '}
+          {/*
+           * Grid-stack: both children share [grid-area:1/1].
+           * The ghost text ("AI co-worker") is the widest phrase and
+           * fixes the container width. RotatingText centers inside it.
+           */}
+          <span className="inline-grid text-primary relative">
+            <span
+              className="invisible select-none whitespace-nowrap [grid-area:1/1] pointer-events-none"
+              aria-hidden="true"
+            >
+              AI co-worker
+            </span>
+            <span className="[grid-area:1/1] flex items-center">
+              <RotatingText
+                texts={['AI agent', 'AI co-worker', 'AI teammate', 'AI colleague']}
+                splitBy="words"
+                mainClassName="whitespace-nowrap"
+                rotationInterval={2500}
+                transition={{ type: 'spring', damping: 20, stiffness: 250 }}
+                initial={{ y: '110%', opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: '-110%', opacity: 0 }}
+              />
+            </span>
+          </span>
         </h1>
 
         <p className="mt-4 max-w-lg text-center text-base leading-relaxed text-muted-foreground">
@@ -80,7 +105,7 @@ export function HeroSection() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Describe what you want your AI employee to do..."
+              placeholder="Describe what you want your AI agent to do..."
               rows={3}
               className="w-full resize-none rounded-2xl bg-transparent px-5 pt-5 pb-14 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
             />
@@ -94,7 +119,11 @@ export function HeroSection() {
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity disabled:opacity-30 hover:opacity-90"
                 aria-label="Start building"
               >
-                <ArrowUp className="h-4 w-4" />
+                {isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
@@ -105,10 +134,7 @@ export function HeroSection() {
           {suggestions.map((s) => (
             <button
               key={s.label}
-              onClick={() => {
-                setInput(s.prompt)
-                handleSubmit(s.prompt)
-              }}
+              onClick={() => setInput(s.prompt)}
               disabled={isSubmitting}
               className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground hover:bg-accent disabled:opacity-50"
             >

@@ -5,23 +5,20 @@ export default async function NewAgentPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect('/auth/login')
-  }
-
   // Create a new agent in draft state with timestamp-based temporary name
-  const timestamp = new Date().toLocaleString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    hour: 'numeric', 
+  // Allow unauthenticated users to start building — user_id will be NULL for guest agents
+  const timestamp = new Date().toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
     minute: '2-digit',
-    hour12: true 
+    hour12: true
   })
-  
+
   const { data: agent, error } = await supabase
     .from('agents')
     .insert({
-      user_id: user.id,
+      user_id: user?.id ?? null,  // Allow null for guest agents
       name: `New Agent (${timestamp})`,
       category: 'general',
       status: 'draft',
@@ -32,7 +29,9 @@ export default async function NewAgentPage() {
     .single()
 
   if (error || !agent) {
-    redirect('/dashboard')
+    console.error('Failed to create agent:', error?.message || 'Unknown error')
+    // Redirect to home with error indicator
+    redirect('/?error=agent_creation_failed')
   }
 
   // Redirect to the agent builder

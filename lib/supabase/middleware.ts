@@ -41,11 +41,9 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (
-    !user &&
-    (request.nextUrl.pathname.startsWith('/dashboard') ||
-      request.nextUrl.pathname.startsWith('/agent'))
-  ) {
+  // Redirect to login only for dashboard
+  // Allow access to /agent/* for unauthenticated users (guest agents)
+  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
     const url = request.nextUrl.clone()
     const returnTo = request.nextUrl.pathname
     url.pathname = '/auth/login'

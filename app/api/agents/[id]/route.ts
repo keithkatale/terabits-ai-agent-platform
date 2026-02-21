@@ -9,20 +9,21 @@ export async function DELETE(
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { id: agentId } = await params
 
-    // Verify ownership
+    // Load agent (guest agents have user_id = NULL)
     const { data: agent } = await supabase
       .from('agents')
       .select('user_id')
       .eq('id', agentId)
       .single()
 
-    if (!agent || agent.user_id !== user.id) {
+    if (!agent) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
+    // Allow deletion if: user owns the agent OR it's a guest agent (user_id = NULL)
+    if (agent.user_id && (!user || agent.user_id !== user.id)) {
       return NextResponse.json({ error: 'Agent not found or access denied' }, { status: 404 })
     }
 
@@ -52,21 +53,23 @@ export async function PATCH(
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { id: agentId } = await params
     const body = await req.json()
 
-    // Verify ownership
+    // Load agent (guest agents have user_id = NULL)
     const { data: agent } = await supabase
       .from('agents')
       .select('user_id')
       .eq('id', agentId)
       .single()
 
-    if (!agent || agent.user_id !== user.id) {
+    if (!agent) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
+    // Allow updates if: user owns the agent OR it's a guest agent (user_id = NULL)
+    // Once authenticated, guest agents are linked to the user on first deploy
+    if (agent.user_id && (!user || agent.user_id !== user.id)) {
       return NextResponse.json({ error: 'Agent not found or access denied' }, { status: 404 })
     }
 

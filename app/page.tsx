@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { HeroSection } from '@/components/landing/hero-section'
-import { HowItWorks } from '@/components/landing/how-it-works'
+import { FeaturesSection } from '@/components/landing/features-section'
+import { HowItWorksSection } from '@/components/landing/how-it-works-section'
 import { UseCases } from '@/components/landing/use-cases'
 import { Footer } from '@/components/landing/footer'
 
@@ -12,9 +14,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">T</span>
-            </div>
+            <Image src="/logo.svg" alt="Terabits" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-semibold text-foreground">Terabits</span>
           </Link>
 
@@ -42,7 +42,8 @@ export default function LandingPage() {
 
       <main className="flex-1">
         <HeroSection />
-        <HowItWorks />
+        <FeaturesSection />
+        <HowItWorksSection />
         <UseCases />
       </main>
 

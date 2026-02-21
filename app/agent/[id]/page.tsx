@@ -12,10 +12,8 @@ export default async function AgentPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect('/auth/login')
-  }
-
+  // Allow unauthenticated users to view and build agents (guest agents have user_id = NULL)
+  // Auth will be required when they try to deploy
   const { data: agent } = await supabase
     .from('agents')
     .select('*')

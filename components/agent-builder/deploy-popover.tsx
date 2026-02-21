@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Rocket,
   Copy,
@@ -20,6 +21,7 @@ interface DeployPopoverProps {
 }
 
 export function DeployPopover({ agent, onAgentUpdate }: DeployPopoverProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +39,12 @@ export function DeployPopover({ agent, onAgentUpdate }: DeployPopoverProps) {
       const res = await fetch(`/api/agents/${agent.id}/deploy`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) {
+        // Check if this is an auth error
+        if (res.status === 401 && data.code === 'REQUIRES_AUTH') {
+          // Redirect to signup to create account and claim this agent
+          router.push(`/auth/sign-up?next=${encodeURIComponent(`/agent/${agent.id}`)}`)
+          return
+        }
         setError(data.error ?? 'Deploy failed')
         return
       }
@@ -50,7 +58,7 @@ export function DeployPopover({ agent, onAgentUpdate }: DeployPopoverProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [agent.id, onAgentUpdate])
+  }, [agent.id, onAgentUpdate, router])
 
   const handleUndeploy = useCallback(async () => {
     setIsLoading(true)
@@ -59,6 +67,11 @@ export function DeployPopover({ agent, onAgentUpdate }: DeployPopoverProps) {
       const res = await fetch(`/api/agents/${agent.id}/deploy`, { method: 'DELETE' })
       const data = await res.json()
       if (!res.ok) {
+        // Check if this is an auth error
+        if (res.status === 401 && data.code === 'REQUIRES_AUTH') {
+          router.push(`/auth/sign-up?next=${encodeURIComponent(`/agent/${agent.id}`)}`)
+          return
+        }
         setError(data.error ?? 'Undeploy failed')
         return
       }
@@ -68,7 +81,7 @@ export function DeployPopover({ agent, onAgentUpdate }: DeployPopoverProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [agent.id, onAgentUpdate])
+  }, [agent.id, onAgentUpdate, router])
 
   const handleCopy = useCallback(async () => {
     if (!publicUrl) return

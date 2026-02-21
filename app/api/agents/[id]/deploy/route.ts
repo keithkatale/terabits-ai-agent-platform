@@ -18,15 +18,31 @@ export async function POST(
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({
+      error: 'Sign up to deploy your agent',
+      code: 'REQUIRES_AUTH'
+    }, { status: 401 })
   }
 
+  // Load the agent (guest agents have user_id = NULL, authenticated users own their agents)
   const { data: agent, error } = await supabase
     .from('agents')
     .select('*')
     .eq('id', id)
-    .eq('user_id', user.id)
     .single()
+
+  // Check ownership: agent must either be owned by this user or be a guest agent (user_id = NULL)
+  if (error || !agent || (agent.user_id && agent.user_id !== user.id)) {
+    return NextResponse.json({ error: 'Agent not found or access denied' }, { status: 404 })
+  }
+
+  // If this was a guest agent, link it to the authenticated user now
+  if (!agent.user_id) {
+    await supabase
+      .from('agents')
+      .update({ user_id: user.id })
+      .eq('id', id)
+  }
 
   if (error || !agent) {
     return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
@@ -80,7 +96,21 @@ export async function DELETE(
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({
+      error: 'Sign up to manage your agent',
+      code: 'REQUIRES_AUTH'
+    }, { status: 401 })
+  }
+
+  // Load the agent and verify ownership
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (!agent || (agent.user_id && agent.user_id !== user.id)) {
+    return NextResponse.json({ error: 'Agent not found or access denied' }, { status: 404 })
   }
 
   const { error } = await supabase
@@ -91,7 +121,6 @@ export async function DELETE(
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('user_id', user.id)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

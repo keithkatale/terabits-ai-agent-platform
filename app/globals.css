@@ -6,19 +6,19 @@
 /* Claude-inspired warm earth-tone theme */
 :root {
   --background: oklch(0.97 0.005 80);
-  --foreground: oklch(0.22 0.01 60);
+  --foreground: oklch(0.16 0.01 260);
   --card: oklch(0.99 0.003 80);
-  --card-foreground: oklch(0.22 0.01 60);
+  --card-foreground: oklch(0.16 0.01 260);
   --popover: oklch(0.99 0.003 80);
-  --popover-foreground: oklch(0.22 0.01 60);
+  --popover-foreground: oklch(0.16 0.01 260);
   --primary: oklch(0.55 0.12 45);
   --primary-foreground: oklch(0.98 0.005 80);
   --secondary: oklch(0.93 0.01 75);
-  --secondary-foreground: oklch(0.30 0.02 60);
+  --secondary-foreground: oklch(0.16 0.01 260);
   --muted: oklch(0.94 0.008 75);
-  --muted-foreground: oklch(0.50 0.02 60);
+  --muted-foreground: oklch(0.40 0.02 260);
   --accent: oklch(0.90 0.02 75);
-  --accent-foreground: oklch(0.30 0.02 60);
+  --accent-foreground: oklch(0.16 0.01 260);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
   --border: oklch(0.90 0.01 75);
@@ -31,11 +31,11 @@
   --chart-5: oklch(0.60 0.15 30);
   --radius: 0.625rem;
   --sidebar: oklch(0.96 0.008 75);
-  --sidebar-foreground: oklch(0.22 0.01 60);
+  --sidebar-foreground: oklch(0.16 0.01 260);
   --sidebar-primary: oklch(0.55 0.12 45);
   --sidebar-primary-foreground: oklch(0.98 0.005 80);
   --sidebar-accent: oklch(0.92 0.015 75);
-  --sidebar-accent-foreground: oklch(0.30 0.02 60);
+  --sidebar-accent-foreground: oklch(0.16 0.01 260);
   --sidebar-border: oklch(0.90 0.01 75);
   --sidebar-ring: oklch(0.55 0.12 45);
 }
@@ -76,7 +76,8 @@
 }
 
 @theme inline {
-  --font-sans: 'Inter', 'Geist', 'Geist Fallback', sans-serif;
+  --font-sans: var(--font-dm-sans), 'DM Sans', sans-serif;
+  --font-serif: var(--font-crimson), 'Georgia', serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback', monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -134,4 +135,44 @@
   .animate-text-shimmer {
     animation: text-shimmer 4s ease-in-out infinite;
   }
+}
+
+/* ── RotatingText component ────────────────────────────────────────────────── */
+
+.text-rotate {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  position: relative;
+  vertical-align: middle;
+}
+
+.text-rotate-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.text-rotate-word {
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.text-rotate-lines {
+  display: block;
+  overflow: hidden;
+}
+
+.text-rotate-element {
+  display: inline-block;
+}
+
+.text-rotate-space {
+  width: 0.25em;
 }
