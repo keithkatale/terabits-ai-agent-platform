@@ -22,6 +22,8 @@ import {
   History,
   ArrowUpRight,
   FileDown,
+  Share2,
+  Check,
 } from 'lucide-react'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import { ToolCall } from '@/components/prompt-kit/tool-call'
@@ -311,6 +313,8 @@ export function AgentPublicView({
   const [isUndeploying, setIsUndeploying] = useState(false)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [activityLabel, setActivityLabel] = useState<string | null>(null)
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null)
+  const [shareSuccess, setShareSuccess] = useState(false)
 
   const stepsEndRef = useRef<HTMLDivElement>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
@@ -364,6 +368,7 @@ export function AgentPublicView({
     setRightPanel('live')
     setSelectedRunId(null)
     setActivityLabel(null)
+    setCurrentRunId(null)
 
     const input =
       inputFields.length > 0
@@ -488,6 +493,7 @@ export function AgentPublicView({
               ts: Date.now(),
             })
           } else if (t === 'start') {
+            if (data.runId) setCurrentRunId(String(data.runId))
             pushLog({ kind: 'start', summary: `Running ${name}…`, ts: Date.now() })
           }
         }
@@ -511,6 +517,7 @@ export function AgentPublicView({
     setView('form')
     setSelectedRunId(null)
     setActivityLabel(null)
+    setCurrentRunId(null)
   }
 
   const handleSelectRun = (run: HistoricRun) => {
@@ -593,6 +600,16 @@ export function AgentPublicView({
     `)
     win.document.close()
     setTimeout(() => { win.focus(); win.print() }, 400)
+  }
+
+  const handleShare = async () => {
+    // Use currentRunId for a live-completed run, selectedRunId for a historic run
+    const runId = currentRunId ?? selectedRunId
+    if (!runId) return
+    const url = `${window.location.origin}/share/${runId}`
+    await navigator.clipboard.writeText(url)
+    setShareSuccess(true)
+    setTimeout(() => setShareSuccess(false), 2500)
   }
 
   return (
@@ -769,6 +786,19 @@ export function AgentPublicView({
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Historic</span>
                   )}
                   <div className="ml-auto flex items-center gap-1.5">
+                    {(currentRunId || selectedRunId) && (
+                      <button
+                        onClick={handleShare}
+                        title="Copy shareable link"
+                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${shareSuccess ? 'border-green-500/30 bg-green-500/10 text-green-600' : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                      >
+                        {shareSuccess ? (
+                          <><Check className="h-3 w-3" /> Copied!</>
+                        ) : (
+                          <><Share2 className="h-3 w-3" /> Share</>
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={handleExportPDF}
                       title="Export as PDF"
