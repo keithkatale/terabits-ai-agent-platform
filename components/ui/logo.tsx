@@ -7,9 +7,9 @@ interface LogoProps {
 }
 
 const sizeConfig = {
-  sm: { width: 24, height: 24 },
-  md: { width: 32, height: 32 },
-  lg: { width: 40, height: 40 },
+  sm: { width: 24, height: 24, className: 'h-6 w-6' },
+  md: { width: 32, height: 32, className: 'h-8 w-8' },
+  lg: { width: 40, height: 40, className: 'h-10 w-10' },
 }
 
 export function Logo({ size = 'md', withText = false, href }: LogoProps) {
@@ -23,7 +23,7 @@ export function Logo({ size = 'md', withText = false, href }: LogoProps) {
         width={dimensions.width}
         height={dimensions.height}
         priority
-        className="h-auto w-auto"
+        className={dimensions.className}
       />
       {withText && <span className="font-semibold text-foreground">Terabits</span>}
     </div>
