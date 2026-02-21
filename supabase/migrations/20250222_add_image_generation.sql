@@ -1,14 +1,26 @@
 -- Create public storage bucket for images
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('ai-generated-images', 'ai-generated-images', true)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
--- RLS policy: Anyone can view images
-CREATE POLICY IF NOT EXISTS "Anyone can view images" ON storage.objects
+-- RLS policies for storage.objects (drop and recreate to avoid conflicts)
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Anyone can view images" ON storage.objects;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Authenticated users can upload images" ON storage.objects;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Create RLS policies
+CREATE POLICY "Anyone can view images" ON storage.objects
   FOR SELECT USING (bucket_id = 'ai-generated-images');
 
--- RLS policy: Authenticated users can upload images
-CREATE POLICY IF NOT EXISTS "Authenticated users can upload images" ON storage.objects
+CREATE POLICY "Authenticated users can upload images" ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'ai-generated-images' AND
     auth.role() = 'authenticated'
@@ -37,8 +49,21 @@ CREATE INDEX IF NOT EXISTS idx_generated_images_created_at ON generated_images(c
 -- Enable RLS on generated_images table
 ALTER TABLE generated_images ENABLE ROW LEVEL SECURITY;
 
--- RLS policy: Users can view images for their own agents
-CREATE POLICY IF NOT EXISTS "Users can view their agent images" ON generated_images
+-- RLS policies for generated_images (drop and recreate to avoid conflicts)
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Users can view their agent images" ON generated_images;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Authenticated users can create images" ON generated_images;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Create RLS policies
+CREATE POLICY "Users can view their agent images" ON generated_images
   FOR SELECT USING (
     agent_id IN (
       SELECT id FROM agents WHERE user_id = auth.uid()
@@ -48,6 +73,5 @@ CREATE POLICY IF NOT EXISTS "Users can view their agent images" ON generated_ima
     )
   );
 
--- RLS policy: Only authenticated users can insert
-CREATE POLICY IF NOT EXISTS "Authenticated users can create images" ON generated_images
+CREATE POLICY "Authenticated users can create images" ON generated_images
   FOR INSERT WITH CHECK (auth.role() = 'authenticated');

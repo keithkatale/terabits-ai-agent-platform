@@ -240,7 +240,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   {
     name: 'ai_image_generate',
     label: 'Generate Image',
-    description: 'Generate images from text descriptions using Google Imagen 3. Supports 512x512, 768x768, and 1024x1024 resolutions.',
+    description: 'Generate images from text descriptions using Google Gemini 3 Pro Image (Nano Banana Pro). Supports 512x512, 768x768, and 1024x1024 resolutions.',
     icon: 'Image',
     category: 'ai_processing',
     status: 'available',

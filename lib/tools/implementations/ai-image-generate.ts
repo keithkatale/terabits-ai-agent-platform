@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 export const aiImageGenerate = tool({
   description:
-    'Generate images from text descriptions using Google Imagen 3 model. Supports configurable resolutions (512x512, 768x768, 1024x1024). Specify resolution in prompt like "512 image of..." or use default 1024x1024.',
+    'Generate images from text descriptions using Google Gemini 3 Pro Image (Nano Banana Pro). Supports configurable resolutions (512x512, 768x768, 1024x1024). Specify resolution in prompt like "512 image of..." or use default 1024x1024.',
   inputSchema: z.object({
     prompt: z
       .string()
@@ -30,62 +30,44 @@ export const aiImageGenerate = tool({
         finalResolution = `${size}x${size}` as '512x512' | '768x768' | '1024x1024'
       }
 
-      // Call Google Imagen 3 API via REST
+      // Call Google Gemini 3 Pro Image API via REST
       const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
       if (!apiKey) {
         throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not configured')
       }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateImage?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            instances: [
-              {
-                prompt,
-              },
-            ],
-            parameters: {
-              sampleCount: 1,
-              guidance_scale: 7.5,
-              aspect_ratio: '1:1',
-            },
+            prompt,
           }),
         }
       )
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`Imagen API error: ${response.status} - ${errorText}`)
+        throw new Error(`Image generation API error: ${response.status} - ${errorText}`)
       }
 
-      const data = (await response.json()) as { predictions: Array<{ bytesBase64Encoded?: string; imageUrl?: string }> }
+      const data = (await response.json()) as { images?: Array<{ image?: string }> }
 
-      if (!data.predictions || data.predictions.length === 0) {
-        throw new Error('No images generated from Imagen API')
+      if (!data.images || data.images.length === 0) {
+        throw new Error('No images generated from API')
       }
 
-      // Get the first image
-      const prediction = data.predictions[0]
-      let imageBuffer: Buffer
-
-      // Handle either base64-encoded bytes or direct image URL
-      if (prediction.bytesBase64Encoded) {
-        imageBuffer = Buffer.from(prediction.bytesBase64Encoded, 'base64')
-      } else if (prediction.imageUrl) {
-        // Download image from URL
-        const imgResponse = await fetch(prediction.imageUrl)
-        if (!imgResponse.ok) {
-          throw new Error(`Failed to download image from Imagen: ${imgResponse.status}`)
-        }
-        imageBuffer = Buffer.from(await imgResponse.arrayBuffer())
-      } else {
-        throw new Error('Invalid Imagen API response: no image data')
+      // Get the first image (base64-encoded)
+      const imageData = data.images[0]
+      if (!imageData.image) {
+        throw new Error('Invalid API response: no image data')
       }
+
+      // The image comes as base64-encoded PNG
+      const imageBuffer = Buffer.from(imageData.image, 'base64')
 
       const fileSizeKb = Math.round(imageBuffer.length / 1024)
 
