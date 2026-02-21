@@ -27,7 +27,7 @@ import type { Agent } from '@/lib/types'
 import { ToolCall } from '@/components/prompt-kit/tool-call'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import { ToolsPanel } from './tools-panel'
-import { TOOL_LABELS as CATALOG_TOOL_LABELS } from '@/lib/tools/catalog'
+import { TOOL_LABELS as CATALOG_TOOL_LABELS } from '@/lib/tools/labels'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

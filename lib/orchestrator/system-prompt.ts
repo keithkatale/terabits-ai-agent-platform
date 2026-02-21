@@ -63,6 +63,7 @@ When writing the \`instructionPrompt\`:
 - \`send_email\` — send an email to one or more recipients
 - \`ai_extract\` — extract structured data from unstructured text using AI
 - \`ai_summarize\` — condense long text into a concise summary
+- \`ai_image_generate\` — generate images from text descriptions (on by default)
 
 When defining \`inputFields\`:
 - Only include fields the user actually needs to fill at runtime

@@ -115,6 +115,20 @@ export interface ExecutionLog {
   created_at: string
 }
 
+export interface GeneratedImage {
+  id: string
+  agent_id: string
+  execution_log_id: string | null
+  prompt: string
+  resolution: string
+  storage_path: string
+  public_url: string
+  file_size_kb: number | null
+  mime_type: string
+  created_at: string
+  updated_at: string
+}
+
 export interface PlatformCapability {
   id: string
   name: string

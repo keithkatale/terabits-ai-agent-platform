@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react'
+import { ImageCard } from '@/components/ui/image-card'
 
 type ToolState = 'pending' | 'running' | 'completed' | 'error'
 
@@ -96,9 +97,20 @@ export function ToolCall({
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Output
               </span>
-              <pre className="mt-1 rounded-md bg-background p-2 text-[11px] leading-relaxed text-foreground overflow-x-auto">
-                {JSON.stringify(output, null, 2)}
-              </pre>
+              {name === 'Generate Image' && output.image_url ? (
+                <div className="mt-2 max-w-sm">
+                  <ImageCard
+                    url={output.image_url}
+                    prompt={output.prompt || input?.prompt || 'Generated image'}
+                    resolution={output.size}
+                    showPrompt={true}
+                  />
+                </div>
+              ) : (
+                <pre className="mt-1 rounded-md bg-background p-2 text-[11px] leading-relaxed text-foreground overflow-x-auto">
+                  {JSON.stringify(output, null, 2)}
+                </pre>
+              )}
             </div>
           )}
           {errorText && (

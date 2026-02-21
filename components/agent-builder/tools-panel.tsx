@@ -37,7 +37,7 @@ import {
   CATEGORY_ORDER,
   type ToolDefinition,
   type ToolCategory,
-} from '@/lib/tools/catalog'
+} from '@/lib/tools/catalog-metadata'
 
 // ── Icon map ──────────────────────────────────────────────────────────────────
 
