@@ -2,12 +2,12 @@
 // Looks up agent by deploy_slug where is_deployed = true.
 // Identical streaming behaviour to /api/agents/[id]/execute but accessible publicly.
 
-import { streamText, tool, stepCountIs } from 'ai'
+import { streamText, stepCountIs } from 'ai'
 import { google } from '@ai-sdk/google'
-import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest } from 'next/server'
+import { getEnabledTools } from '@/lib/tools/catalog'
 
 interface StoredLogEntry {
   kind: string
@@ -26,103 +26,6 @@ const encoder = new TextEncoder()
 function sse(data: object): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
 }
-
-// ── Tools ─────────────────────────────────────────────────────────────────────
-
-const webSearch = tool({
-  description:
-    'Search the web for up-to-date information. Returns titles, URLs, and snippets.',
-  inputSchema: z.object({
-    query: z.string().describe('Search query'),
-    num: z
-      .number()
-      .min(1)
-      .max(10)
-      .optional()
-      .describe('Number of results to return (default 5)'),
-  }),
-  execute: async ({ query, num = 5 }) => {
-    const apiKey = process.env.SERPER_API_KEY
-    if (!apiKey) {
-      return {
-        error: 'SERPER_API_KEY is not configured.',
-        results: [],
-      }
-    }
-    try {
-      const res = await fetch('https://google.serper.dev/search', {
-        method: 'POST',
-        headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: query, num }),
-        signal: AbortSignal.timeout(10_000),
-      })
-      if (!res.ok) throw new Error(`Serper API returned ${res.status}`)
-      const data = await res.json()
-      return {
-        query,
-        results: ((data.organic as any[]) ?? []).map((r) => ({
-          title: r.title,
-          url: r.link,
-          snippet: r.snippet,
-        })),
-        answerBox: data.answerBox ?? null,
-        knowledgeGraph: data.knowledgeGraph ?? null,
-      }
-    } catch (e) {
-      return {
-        error: `Search failed: ${e instanceof Error ? e.message : 'Unknown error'}`,
-        results: [],
-      }
-    }
-  },
-})
-
-const webScrape = tool({
-  description:
-    'Fetch and extract readable text from a webpage. Use after web_search to read full articles.',
-  inputSchema: z.object({
-    url: z.string().describe('The URL to fetch'),
-  }),
-  execute: async ({ url }) => {
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
-        },
-        signal: AbortSignal.timeout(15_000),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
-      const html = await res.text()
-
-      let text = html
-        .replace(/<!--[\s\S]*?-->/g, '')
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/\s+/g, ' ')
-        .trim()
-
-      if (text.length > 10_000) {
-        text = text.slice(0, 10_000) + '\n\n[content truncated at 10,000 characters]'
-      }
-
-      return { url, content: text, length: text.length }
-    } catch (e) {
-      return {
-        error: `Scrape failed: ${e instanceof Error ? e.message : 'Unknown error'}`,
-        url,
-        content: null,
-      }
-    }
-  },
-})
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
@@ -196,15 +99,8 @@ export async function POST(
     return Response.json({ error: 'input must be an object' }, { status: 400 })
   }
 
-  // Tools
-  const toolConfig = (agent.tool_config ?? {}) as Record<string, { enabled?: boolean }>
-  const searchEnabled = toolConfig['web_search']?.enabled !== false
-  const scrapeEnabled =
-    toolConfig['web_scrape']?.enabled !== false || toolConfig['read']?.enabled !== false
-
-  const tools: Record<string, typeof webSearch | typeof webScrape> = {}
-  if (searchEnabled) tools.web_search = webSearch
-  if (scrapeEnabled) tools.web_scrape = webScrape
+  // Load enabled tools from catalog based on agent's tool_config
+  const tools = getEnabledTools((agent.tool_config ?? {}) as Record<string, { enabled?: boolean }>)
 
   const systemPrompt = buildExecutionSystemPrompt(agent.instruction_prompt)
   const userMessage = formatUserInput(input as Record<string, unknown>)

@@ -21,14 +21,17 @@ import {
   Zap,
   Search,
   Globe,
+  Wrench,
 } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 import { ToolCall } from '@/components/prompt-kit/tool-call'
 import { Markdown } from '@/components/prompt-kit/markdown'
+import { ToolsPanel } from './tools-panel'
+import { TOOL_LABELS as CATALOG_TOOL_LABELS } from '@/lib/tools/catalog'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'preview' | 'instructions' | 'json' | 'logs'
+type Tab = 'preview' | 'instructions' | 'json' | 'logs' | 'tools'
 type PreviewView = 'form' | 'running' | 'result'
 
 interface ExecutionStep {
@@ -54,6 +57,8 @@ interface LogEntry {
 }
 
 const TOOL_LABELS: Record<string, string> = {
+  ...CATALOG_TOOL_LABELS,
+  // Keep friendly short-form labels for the two default tools
   web_search: 'Web search',
   web_scrape: 'Read webpage',
 }
@@ -63,6 +68,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'instructions', label: 'Instructions', icon: FileText },
   { id: 'json', label: 'JSON', icon: Code2 },
   { id: 'logs', label: 'Logs', icon: ScrollText },
+  { id: 'tools', label: 'Tools', icon: Wrench },
 ]
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -234,9 +240,10 @@ interface InstructionsPanelProps {
   agent: Agent
 }
 
-export function InstructionsPanel({ agent }: InstructionsPanelProps) {
+export function InstructionsPanel({ agent: initialAgent }: InstructionsPanelProps) {
   const [tab, setTab] = useState<Tab>('preview')
   const [copied, setCopied] = useState(false)
+  const [currentAgent, setCurrentAgent] = useState<Agent>(initialAgent)
 
   // Execution state
   const [inputValues, setInputValues] = useState<Record<string, string>>({})
@@ -261,6 +268,7 @@ export function InstructionsPanel({ agent }: InstructionsPanelProps) {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
+  const agent = currentAgent
   const instructionPrompt = agent.instruction_prompt
   const executionContext = agent.execution_context as {
     triggerConfig?: {
@@ -966,6 +974,16 @@ export function InstructionsPanel({ agent }: InstructionsPanelProps) {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Tools ─────────────────────────────────────────────────────── */}
+        {tab === 'tools' && (
+          <ToolsPanel
+            agent={currentAgent}
+            onUpdate={(toolConfig) =>
+              setCurrentAgent((prev) => ({ ...prev, tool_config: toolConfig }))
+            }
+          />
         )}
       </div>
     </div>

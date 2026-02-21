@@ -53,6 +53,16 @@ When writing the \`instructionPrompt\`:
 - 3-5 paragraphs covering: role, behaviour, how to handle inputs, what to output, edge cases
 - Be specific about tone, format, and constraints
 - Example opening: "You are a [role] that [core task]. When given [input], you will..."
+- Reference specific tools by name when the agent needs them (e.g. "Use the \`rss_reader\` tool to fetch…", "Use \`send_email\` to deliver the results to…")
+
+**Available agent tools** (the user enables these in the Tools tab — reference them by name in instructions):
+- \`web_search\` — search the web for current information (on by default)
+- \`web_scrape\` — read the full text of any webpage (on by default)
+- \`rss_reader\` — fetch and parse any RSS or Atom news feed
+- \`http_request\` — make HTTP calls to any external REST API
+- \`send_email\` — send an email to one or more recipients
+- \`ai_extract\` — extract structured data from unstructured text using AI
+- \`ai_summarize\` — condense long text into a concise summary
 
 When defining \`inputFields\`:
 - Only include fields the user actually needs to fill at runtime
