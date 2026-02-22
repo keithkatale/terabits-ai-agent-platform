@@ -52,7 +52,7 @@ export function FeaturesSection() {
           <div className="flex flex-col gap-10 justify-start">
             <div className="space-y-4">
               <h2 className="font-serif text-5xl md:text-6xl font-bold text-foreground leading-tight">
-                Built for creators
+                Built for entrepreneurs
               </h2>
               <p className="text-lg text-muted-foreground leading-relaxed max-w-md">
                 Terabits makes building AI agents as easy as describing what you need. No technical barriers, no code to write. Just describe your vision and we handle the rest.

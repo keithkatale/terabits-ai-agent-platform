@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Button } from '@/components/ui/button'
 import { HeroSection } from '@/components/landing/hero-section'
 import { FeaturesSection } from '@/components/landing/features-section'
 import { HowItWorksSection } from '@/components/landing/how-it-works-section'
+import { PricingSection } from '@/components/landing/pricing-section'
 import { UseCases } from '@/components/landing/use-cases'
 import { Footer } from '@/components/landing/footer'
+import { AuthNavbar } from '@/components/landing/auth-navbar'
 
 export default function LandingPage() {
   return (
@@ -27,16 +28,7 @@ export default function LandingPage() {
             </a>
           </nav>
 
-          <div className="flex items-center gap-3">
-            <Link href="/auth/login">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                Sign in
-              </Button>
-            </Link>
-            <Link href="/auth/sign-up">
-              <Button size="sm">Sign up</Button>
-            </Link>
-          </div>
+          <AuthNavbar />
         </div>
       </header>
 
@@ -45,6 +37,7 @@ export default function LandingPage() {
         <FeaturesSection />
         <HowItWorksSection />
         <UseCases />
+        <PricingSection />
       </main>
 
       <Footer />
