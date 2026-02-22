@@ -140,54 +140,54 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
             ) : packages.length === 0 ? (
               <p className="text-sm text-muted-foreground">No packages available</p>
             ) : (
-              <div className="grid gap-4 grid-cols-2">
+              <div className="grid gap-3 grid-cols-2">
                 {packages.map((pkg) => (
                   <button
                     key={pkg.id}
                     onClick={() => handleBuyCredits(pkg.id)}
                     disabled={!sdkLoaded || isProcessing}
-                    className={`relative flex flex-col rounded-xl border-2 p-5 text-left transition-all ${
+                    className={`relative flex flex-col rounded-lg border-2 p-3 text-left transition-all ${
                       selectedPackageId === pkg.id
                         ? 'border-primary bg-primary/5'
                         : 'border-border/50 hover:border-border bg-card'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {/* Price */}
-                    <div className="mb-4">
+                    <div className="mb-2">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-bold text-foreground">${pkg.price_usd}</span>
+                        <span className="text-2xl font-bold text-foreground">${pkg.price_usd}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">One-time purchase</p>
+                      <p className="text-xs text-muted-foreground">One-time</p>
                     </div>
 
                     {/* Credits */}
-                    <div className="mb-4 flex-1 rounded-lg bg-primary/10 p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Zap className="h-4 w-4 text-primary" />
-                        <span className="font-semibold text-foreground text-sm">
+                    <div className="mb-3 flex-1 rounded-md bg-primary/10 p-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Zap className="h-3 w-3 text-primary" />
+                        <span className="font-semibold text-foreground text-xs">
                           {pkg.credit_amount.toLocaleString()}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        ${(pkg.price_usd / pkg.credit_amount).toFixed(4)}/credit
+                        ${(pkg.price_usd / pkg.credit_amount).toFixed(4)}/ea
                       </p>
                     </div>
 
                     {/* Button */}
                     <div className="w-full">
                       {!sdkLoaded ? (
-                        <span className="inline-flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center justify-center gap-1 text-xs text-muted-foreground">
                           <Loader2 className="h-3 w-3 animate-spin" />
-                          Loading...
+                          Loading
                         </span>
                       ) : isProcessing && selectedPackageId === pkg.id ? (
-                        <span className="inline-flex items-center justify-center gap-2 text-xs text-primary font-medium">
+                        <span className="inline-flex items-center justify-center gap-1 text-xs text-primary font-medium">
                           <Loader2 className="h-3 w-3 animate-spin" />
-                          Opening...
+                          Opening
                         </span>
                       ) : (
-                        <span className="text-xs font-semibold text-primary group-hover:underline">
-                          Buy Credits →
+                        <span className="text-xs font-semibold text-primary">
+                          Buy →
                         </span>
                       )}
                     </div>
