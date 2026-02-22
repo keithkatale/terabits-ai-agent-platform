@@ -8,6 +8,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest } from 'next/server'
 import { getEnabledTools } from '@/lib/tools/catalog'
+import { useTokenCredits } from '@/lib/payments/use-token-credits'
+import creditsService from '@/lib/payments/credits-service'
 
 interface StoredLogEntry {
   kind: string
@@ -68,8 +70,16 @@ export async function POST(
 ) {
   const { slug } = await params
 
-  // No auth check — this is a public endpoint for deployed agents.
+  // Public endpoint but with optional auth for credit deduction
   const supabase = await createClient()
+
+  // Try to get authenticated user (optional — if owner, credits will be deducted)
+  const { data: { user } } = await supabase.auth.getUser()
+  let userCreditBalance: number | null = null
+  if (user) {
+    const balance = await creditsService.getBalance(user.id)
+    userCreditBalance = balance?.balance ?? null
+  }
 
   const { data: agent, error: agentError } = await supabase
     .from('agents')
@@ -131,7 +141,7 @@ export async function POST(
     async start(controller) {
       const send = (data: object) => controller.enqueue(sse(data))
 
-      send({ type: 'start', agentName: agent.name, runId: runLogId, timestamp: Date.now() })
+      send({ type: 'start', agentName: agent.name, runId: runLogId, creditBalance: userCreditBalance, timestamp: Date.now() })
 
       try {
         const result = streamText({
@@ -155,7 +165,7 @@ export async function POST(
         let stepIndex = 0
         let lastFinishReason = ''
         let totalStepsUsed = 0
-        let lastUsage: { totalTokens?: number } | undefined
+        let lastUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined
         const storedLogs: StoredLogEntry[] = []
 
         for await (const part of result.fullStream) {
@@ -198,6 +208,41 @@ export async function POST(
           send({ type: 'complete', result: { output: { result: finalText } }, timestamp: Date.now() })
         }
 
+        // Deduct credits if user is authenticated and execution succeeded
+        let creditsUsed = 0
+        let balanceAfter = userCreditBalance ?? 0
+        let aiCostUsd = 0
+        let platformCostUsd = 0
+        if (user && runLogId && !runError) {
+          try {
+            const creditResult = await useTokenCredits({
+              modelName: 'gemini-3-flash-preview',
+              promptTokens: lastUsage?.promptTokens ?? 0,
+              completionTokens: lastUsage?.completionTokens ?? 0,
+              executionId: runLogId,
+              userId: user.id,
+              agentId: agent.id,
+            })
+            creditsUsed = creditResult.creditsDeducted
+            balanceAfter = creditResult.remainingBalance
+            aiCostUsd = creditResult.costBreakdown.aiCost
+            platformCostUsd = creditResult.costBreakdown.platformCost
+            send({
+              type: 'credits_used',
+              creditsUsed,
+              balanceAfter,
+              totalTokens: lastUsage?.totalTokens ?? 0,
+              promptTokens: lastUsage?.promptTokens ?? 0,
+              completionTokens: lastUsage?.completionTokens ?? 0,
+              aiCostUsd,
+              platformCostUsd,
+              timestamp: Date.now(),
+            })
+          } catch (err) {
+            console.error('Credit deduction failed (non-fatal):', err)
+          }
+        }
+
         // Persist run result
         if (adminDb && runLogId) {
           await adminDb
@@ -208,8 +253,11 @@ export async function POST(
                 result: finalText,
                 logs: storedLogs,
                 tool_calls_count: totalStepsUsed,
-                tokens_used: lastUsage?.totalTokens ?? null,
               },
+              prompt_tokens: lastUsage?.promptTokens ?? 0,
+              completion_tokens: lastUsage?.completionTokens ?? 0,
+              total_tokens: lastUsage?.totalTokens ?? 0,
+              credits_used: creditsUsed,
               error: runError,
               completed_at: new Date().toISOString(),
             })

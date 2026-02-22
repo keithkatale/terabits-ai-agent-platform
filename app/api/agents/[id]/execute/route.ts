@@ -296,9 +296,11 @@ export async function POST(
                 result: finalText,
                 logs: storedLogs,
                 tool_calls_count: totalStepsUsed,
-                tokens_used: lastUsage?.totalTokens ?? null,
-                credits_used: creditsUsed,
               },
+              prompt_tokens: lastUsage?.promptTokens ?? 0,
+              completion_tokens: lastUsage?.completionTokens ?? 0,
+              total_tokens: lastUsage?.totalTokens ?? 0,
+              credits_used: creditsUsed,
               error: runError,
               completed_at: new Date().toISOString(),
             })

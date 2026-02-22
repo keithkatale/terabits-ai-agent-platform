@@ -25,9 +25,12 @@ import {
   FileDown,
   Share2,
   Check,
+  Coins,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import { ToolCall } from '@/components/prompt-kit/tool-call'
+import { CreditsPurchaseModalSimple } from '@/components/dashboard/credits-purchase-modal-simple'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -36,7 +39,7 @@ type RightPanel = 'live' | 'history'
 
 interface ExecutionStep {
   id: string
-  type: 'reasoning' | 'thinking' | 'tool' | 'result' | 'error'
+  type: 'reasoning' | 'thinking' | 'tool' | 'result' | 'error' | 'credits'
   message: string
   timestamp: Date
   toolData?: {
@@ -49,7 +52,7 @@ interface ExecutionStep {
 
 interface LogEntry {
   id: string
-  kind: 'start' | 'reasoning' | 'text' | 'tool_start' | 'tool_end' | 'error' | 'done' | 'finish'
+  kind: 'start' | 'reasoning' | 'text' | 'tool_start' | 'tool_end' | 'error' | 'done' | 'finish' | 'credits'
   summary: string
   detail?: unknown
   ts: number
@@ -161,6 +164,7 @@ function LiveLogEntry({ entry }: { entry: LogEntry }) {
     error:     { color: 'text-red-600',           bgColor: 'bg-red-500/10',    icon: XCircle,     label: 'ERROR'  },
     done:      { color: 'text-green-600',         bgColor: 'bg-green-500/10',  icon: CheckCircle2,label: 'DONE'   },
     finish:    { color: 'text-muted-foreground',  bgColor: 'bg-muted/30',      icon: Globe,       label: 'FINISH' },
+    credits:   { color: 'text-yellow-600',        bgColor: 'bg-yellow-500/10', icon: Coins,       label: 'CREDITS'},
   }
 
   const c = config[entry.kind]
@@ -316,6 +320,8 @@ export function AgentPublicView({
   const [activityLabel, setActivityLabel] = useState<string | null>(null)
   const [currentRunId, setCurrentRunId] = useState<string | null>(null)
   const [shareSuccess, setShareSuccess] = useState(false)
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
+  const [showNoCreditsModal, setShowNoCreditsModal] = useState(false)
 
   const stepsEndRef = useRef<HTMLDivElement>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
@@ -345,6 +351,15 @@ export function AgentPublicView({
   }, [agentId, isOwner])
 
   useEffect(() => { fetchHistory() }, [fetchHistory])
+
+  // Fetch credit balance on mount (owner only)
+  useEffect(() => {
+    if (!isOwner) return
+    fetch('/api/user/credits')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setCreditBalance(data.balance?.balance ?? 0) })
+      .catch(() => {})
+  }, [isOwner])
 
   const handleUndeploy = async () => {
     setIsUndeploying(true)
@@ -493,9 +508,54 @@ export function AgentPublicView({
               detail: { finishReason: data.finishReason, usage: data.usage },
               ts: Date.now(),
             })
+          } else if (t === 'credits_used') {
+            const newBalance = data.balanceAfter as number
+            setCreditBalance(newBalance)
+            const totalTokens = (data.totalTokens as number ?? 0).toLocaleString()
+            const cost = (data.platformCostUsd as number ?? 0).toFixed(4)
+            const creditsUsed = data.creditsUsed as number
+            // Show finish toast with cost breakdown
+            toast.success('Run complete', {
+              description: `${creditsUsed} credit${creditsUsed !== 1 ? 's' : ''} used · ${totalTokens} tokens · ~$${cost}`,
+              duration: 8000,
+              action:
+                newBalance < 10
+                  ? { label: 'Buy Credits', onClick: () => setShowNoCreditsModal(true) }
+                  : undefined,
+            })
+            // Also append to activity log
+            pushLog({
+              kind: 'done',
+              summary: `${creditsUsed} credits · ${totalTokens} tokens · ~$${cost}`,
+              detail: {
+                creditsUsed,
+                balanceAfter: newBalance,
+                totalTokens: data.totalTokens,
+                aiCostUsd: data.aiCostUsd,
+                platformCostUsd: data.platformCostUsd,
+              },
+              ts: Date.now(),
+            })
           } else if (t === 'start') {
             if (data.runId) setCurrentRunId(String(data.runId))
-            pushLog({ kind: 'start', summary: `Running ${name}…`, ts: Date.now() })
+            // Update credit balance from server-provided value
+            if (data.creditBalance !== undefined && data.creditBalance !== null) {
+              setCreditBalance(data.creditBalance as number)
+            }
+            const balance = (data.creditBalance ?? creditBalance) as number | null
+            pushLog({
+              kind: 'start',
+              summary: `Running ${name}…${balance !== null ? ` · ${balance} credits available` : ''}`,
+              ts: Date.now(),
+            })
+            // Show start toast with available credits (owner only)
+            if (isOwner && balance !== null) {
+              toast(`Starting ${name}`, {
+                description: `${balance.toLocaleString()} credits available`,
+                icon: '⚡',
+                duration: 3000,
+              })
+            }
           }
         }
       }
@@ -658,6 +718,19 @@ export function AgentPublicView({
             <h1 className="truncate text-sm font-semibold text-foreground">{name}</h1>
             {description && <p className="truncate text-xs text-muted-foreground">{description}</p>}
           </div>
+          {/* Credits counter — owner only */}
+          {isOwner && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Coins className="h-3.5 w-3.5" />
+              {isExecuting ? (
+                <span className="animate-pulse">Counting credits...</span>
+              ) : creditBalance !== null ? (
+                <span className={creditBalance === 0 ? 'text-red-500 font-medium' : ''}>
+                  {creditBalance.toLocaleString()} credits
+                </span>
+              ) : null}
+            </div>
+          )}
           <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground">
             Powered by Terabits AI
           </span>
@@ -753,6 +826,15 @@ export function AgentPublicView({
                       <div>
                         <p className="text-xs font-semibold text-red-600">Error</p>
                         <p className="mt-0.5 text-xs text-red-600/80">{step.message}</p>
+                      </div>
+                    </div>
+                  )
+                  if (step.type === 'credits') return (
+                    <div key={step.id} className="flex items-start gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
+                      <Coins className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
+                      <div>
+                        <p className="text-xs font-semibold text-yellow-600">Credits</p>
+                        <p className="mt-0.5 text-xs text-yellow-600/80">{step.message}</p>
                       </div>
                     </div>
                   )
@@ -923,6 +1005,12 @@ export function AgentPublicView({
           )}
         </div>
       </div>
+
+      {/* Credits purchase modal */}
+      <CreditsPurchaseModalSimple
+        isOpen={showNoCreditsModal}
+        onOpenChange={setShowNoCreditsModal}
+      />
     </div>
   )
 }

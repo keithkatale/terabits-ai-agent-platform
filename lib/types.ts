@@ -113,6 +113,10 @@ export interface ExecutionLog {
   started_at: string | null
   completed_at: string | null
   created_at: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  credits_used: number
 }
 
 export interface GeneratedImage {
