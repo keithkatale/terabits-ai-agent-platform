@@ -10,6 +10,7 @@ import { NextRequest } from 'next/server'
 import { getEnabledTools } from '@/lib/tools/catalog'
 import { useTokenCredits } from '@/lib/payments/use-token-credits'
 import creditsService from '@/lib/payments/credits-service'
+import { normalizeUsage, addUsage } from '@/lib/ai/usage'
 
 interface StoredLogEntry {
   kind: string
@@ -165,8 +166,8 @@ export async function POST(
         let stepIndex = 0
         let lastFinishReason = ''
         let totalStepsUsed = 0
-        let lastUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined
         const storedLogs: StoredLogEntry[] = []
+        let accumulatedUsage = normalizeUsage(undefined)
 
         for await (const part of result.fullStream) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -194,9 +195,23 @@ export async function POST(
             send({ type: 'error', error: errMsg, timestamp: Date.now() })
           } else if (kind === 'finish') {
             lastFinishReason = p.finishReason ?? ''
-            lastUsage = p.usage
-            send({ type: 'finish', finishReason: p.finishReason, usage: p.usage, timestamp: Date.now() })
+            if (p.totalUsage != null) {
+              accumulatedUsage = normalizeUsage(p.totalUsage)
+            } else {
+              accumulatedUsage = addUsage(accumulatedUsage, p.usage)
+            }
+            send({ type: 'finish', finishReason: p.finishReason, usage: p.usage ?? p.totalUsage, timestamp: Date.now() })
           }
+        }
+
+        let usage = accumulatedUsage
+        try {
+          const totalUsage = await Promise.resolve((result as { totalUsage?: PromiseLike<{ inputTokens?: number; outputTokens?: number; totalTokens?: number }> }).totalUsage)
+          if (totalUsage && (totalUsage.totalTokens ?? (totalUsage.inputTokens ?? 0) + (totalUsage.outputTokens ?? 0)) > 0) {
+            usage = normalizeUsage(totalUsage)
+          }
+        } catch {
+          // use accumulatedUsage
         }
 
         let runError: string | null = null
@@ -217,8 +232,8 @@ export async function POST(
           try {
             const creditResult = await useTokenCredits({
               modelName: 'gemini-3-flash-preview',
-              promptTokens: lastUsage?.promptTokens ?? 0,
-              completionTokens: lastUsage?.completionTokens ?? 0,
+              promptTokens: usage.promptTokens,
+              completionTokens: usage.completionTokens,
               executionId: runLogId,
               userId: user.id,
               agentId: agent.id,
@@ -231,9 +246,9 @@ export async function POST(
               type: 'credits_used',
               creditsUsed,
               balanceAfter,
-              totalTokens: lastUsage?.totalTokens ?? 0,
-              promptTokens: lastUsage?.promptTokens ?? 0,
-              completionTokens: lastUsage?.completionTokens ?? 0,
+              totalTokens: usage.totalTokens,
+              promptTokens: usage.promptTokens,
+              completionTokens: usage.completionTokens,
               aiCostUsd,
               platformCostUsd,
               timestamp: Date.now(),
@@ -254,9 +269,9 @@ export async function POST(
                 logs: storedLogs,
                 tool_calls_count: totalStepsUsed,
               },
-              prompt_tokens: lastUsage?.promptTokens ?? 0,
-              completion_tokens: lastUsage?.completionTokens ?? 0,
-              total_tokens: lastUsage?.totalTokens ?? 0,
+              prompt_tokens: usage.promptTokens,
+              completion_tokens: usage.completionTokens,
+              total_tokens: usage.totalTokens,
               credits_used: creditsUsed,
               error: runError,
               completed_at: new Date().toISOString(),

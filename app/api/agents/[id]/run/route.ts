@@ -1,11 +1,12 @@
 import { streamText, convertToModelMessages } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import { normalizeUsage } from '@/lib/ai/usage'
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY!,
 })
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
 
 export async function POST(
   req: Request,
@@ -65,19 +66,25 @@ export async function POST(
     started_at: new Date().toISOString(),
   }).select().single()
 
+  const modelName = agent.model || 'gemini-3-flash-preview'
   const result = streamText({
-    model: google(agent.model || 'gemini-3-flash-preview'),
+    model: google(modelName),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     maxOutputTokens: 4096,
-    onFinish: async ({ text }) => {
-      // Update the execution log on completion
+    onFinish: async ({ text, totalUsage: rawUsage }) => {
+      // Update the execution log with status, output, and token usage
       if (log) {
+        const usage = normalizeUsage(rawUsage as { inputTokens?: number; outputTokens?: number; totalTokens?: number })
         await supabase
           .from('execution_logs')
           .update({
             status: 'completed',
-            output: { response_length: text.length },
+            output: { response_length: text?.length ?? 0 },
+            prompt_tokens: usage.promptTokens,
+            completion_tokens: usage.completionTokens,
+            total_tokens: usage.totalTokens,
+            credits_used: 0, // This path does not deduct credits; use execute route for that
             completed_at: new Date().toISOString(),
           })
           .eq('id', log.id)

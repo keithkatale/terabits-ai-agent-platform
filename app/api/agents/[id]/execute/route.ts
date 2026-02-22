@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server'
 import { getEnabledTools } from '@/lib/tools/catalog'
 import { useTokenCredits } from '@/lib/payments/use-token-credits'
 import creditsService from '@/lib/payments/credits-service'
+import { normalizeUsage, addUsage } from '@/lib/ai/usage'
 
 // Compact log entry stored alongside run output in the DB
 interface StoredLogEntry {
@@ -180,8 +181,9 @@ export async function POST(
         let stepIndex = 0
         let lastFinishReason = ''
         let totalStepsUsed = 0
-        let lastUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined
         const storedLogs: StoredLogEntry[] = []
+        // Accumulate token usage across steps (SDK uses inputTokens/outputTokens per step or totalUsage on final finish)
+        let accumulatedUsage = normalizeUsage(undefined)
 
         // Use `as any` to handle SDK v6 runtime field names that differ from typings
         // (textDelta vs text, input vs args, output vs result, reasoning part not in union)
@@ -234,14 +236,30 @@ export async function POST(
             })
           } else if (kind === 'finish') {
             lastFinishReason = p.finishReason ?? ''
-            lastUsage = p.usage
+            // Final finish may send totalUsage (aggregate); otherwise accumulate per-step usage
+            if (p.totalUsage != null) {
+              accumulatedUsage = normalizeUsage(p.totalUsage)
+            } else {
+              accumulatedUsage = addUsage(accumulatedUsage, p.usage)
+            }
             send({
               type: 'finish',
               finishReason: p.finishReason,
-              usage: p.usage,
+              usage: p.usage ?? p.totalUsage,
               timestamp: Date.now(),
             })
           }
+        }
+
+        // Prefer result.totalUsage (aggregated) when available; otherwise use accumulated from stream parts
+        let usage = accumulatedUsage
+        try {
+          const totalUsage = await Promise.resolve((result as { totalUsage?: PromiseLike<{ inputTokens?: number; outputTokens?: number; totalTokens?: number }> }).totalUsage)
+          if (totalUsage && (totalUsage.totalTokens ?? (totalUsage.inputTokens ?? 0) + (totalUsage.outputTokens ?? 0)) > 0) {
+            usage = normalizeUsage(totalUsage)
+          }
+        } catch {
+          // use accumulatedUsage
         }
 
         // If the model ran out of steps while still calling tools and produced no text output,
@@ -266,8 +284,8 @@ export async function POST(
           try {
             const creditResult = await useTokenCredits({
               modelName: 'gemini-3-flash-preview',
-              promptTokens: lastUsage?.promptTokens ?? 0,
-              completionTokens: lastUsage?.completionTokens ?? 0,
+              promptTokens: usage.promptTokens,
+              completionTokens: usage.completionTokens,
               executionId: runLog.id,
               userId: user.id,
               agentId: id,
@@ -278,7 +296,7 @@ export async function POST(
               type: 'credits_used',
               creditsUsed,
               balanceAfter,
-              totalTokens: lastUsage?.totalTokens ?? 0,
+              totalTokens: usage.totalTokens,
               timestamp: Date.now()
             })
           } catch (err) {
@@ -297,9 +315,9 @@ export async function POST(
                 logs: storedLogs,
                 tool_calls_count: totalStepsUsed,
               },
-              prompt_tokens: lastUsage?.promptTokens ?? 0,
-              completion_tokens: lastUsage?.completionTokens ?? 0,
-              total_tokens: lastUsage?.totalTokens ?? 0,
+              prompt_tokens: usage.promptTokens,
+              completion_tokens: usage.completionTokens,
+              total_tokens: usage.totalTokens,
               credits_used: creditsUsed,
               error: runError,
               completed_at: new Date().toISOString(),
