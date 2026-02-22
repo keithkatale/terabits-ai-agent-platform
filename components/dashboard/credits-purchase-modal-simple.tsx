@@ -24,7 +24,13 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
   const [packages, setPackages] = useState<CreditPackage[]>([])
   const [isLoadingCredits, setIsLoadingCredits] = useState(false)
   const [isLoadingPackages, setIsLoadingPackages] = useState(false)
-  const { sdkLoaded, isProcessing, openCheckout } = useDodoCheckout()
+
+  // Close the modal when Dodo checkout opens
+  // Reopen it if the user cancels or an error occurs
+  const { sdkLoaded, isProcessing, openCheckout } = useDodoCheckout(
+    () => onOpenChange(false), // Called when Dodo checkout opens
+    () => onOpenChange(true)   // Called when Dodo checkout closes
+  )
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null)
 
   useEffect(() => {

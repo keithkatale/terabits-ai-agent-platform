@@ -83,6 +83,8 @@ function initializeSDK() {
       switch (event.event_type) {
         case 'checkout.opened':
           console.log('✅ Checkout overlay opened')
+          // Hide the Dialog to allow Dodo overlay to be interactive
+          // This callback should be set by the modal component
           break
         case 'checkout.form_ready':
           // Per documentation: "form is ready to receive user input"
@@ -97,15 +99,26 @@ function initializeSDK() {
           break
         case 'checkout.closed':
           console.log('ℹ️ Checkout closed by user')
+          // Reopen the Dialog when user closes Dodo checkout
+          if (onCheckoutClose) {
+            onCheckoutClose()
+          }
           break
         case 'checkout.redirect':
           console.log('↗️ Checkout will redirect')
           break
         case 'checkout.error':
           console.error('❌ Checkout error:', event.data?.message)
+          // On error, reopen the Dialog
+          if (onCheckoutClose) {
+            onCheckoutClose()
+          }
           break
         case 'checkout.link_expired':
           console.warn('⚠️ Checkout link expired')
+          if (onCheckoutClose) {
+            onCheckoutClose()
+          }
           break
       }
     },
@@ -121,7 +134,10 @@ function initializeSDK() {
  * - Listen to checkout.form_ready to know when form is interactive
  * - Handle all relevant events for complete UX
  */
-export function useDodoCheckout() {
+export function useDodoCheckout(
+  onCheckoutOpen?: () => void,
+  onCheckoutClose?: () => void
+) {
   const [sdkLoaded, setSdkLoaded] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const initAttempted = useRef(false)
@@ -183,6 +199,11 @@ export function useDodoCheckout() {
             showSecurityBadge: true,
           },
         })
+
+        // Call callback to hide the Dialog when checkout opens
+        if (onCheckoutOpen) {
+          onCheckoutOpen()
+        }
 
         // Note: Processing state is kept true until checkout closes
         // The SDK handles the full payment flow and redirects
