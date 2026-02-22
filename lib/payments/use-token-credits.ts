@@ -4,7 +4,7 @@
  */
 
 import { tokenConverter } from './token-to-credit-converter'
-import { creditsService } from './credits-service'
+import creditsService from './credits-service'
 
 interface ExecutionTokenMetrics {
   modelName: string
