@@ -129,9 +129,32 @@ class CreditsService {
     const supabase = await this.initSupabase()
 
     // Get current balance
-    const balance = await this.getBalance(userId)
+    let balance = await this.getBalance(userId)
+
+    // If user doesn't have a credits record, initialize it
     if (!balance) {
-      throw new Error('User credits not found')
+      console.log(`Initializing credits for new user: ${userId}`)
+      const { error: insertError } = await supabase
+        .from('user_credits')
+        .insert({
+          user_id: userId,
+          balance: 0,
+          total_purchased: 0,
+          total_used: 0,
+          free_credits_used_this_month: 0,
+          last_monthly_reset: new Date().toISOString(),
+        })
+
+      if (insertError) {
+        console.error('Error initializing user credits:', insertError)
+        throw insertError
+      }
+
+      // Fetch the newly created balance
+      balance = await this.getBalance(userId)
+      if (!balance) {
+        throw new Error('Failed to initialize user credits')
+      }
     }
 
     const newBalance = balance.balance + amount
@@ -166,6 +189,8 @@ class CreditsService {
 
     // Grant deploy and share privileges
     await this.grantPaidTierPrivileges(userId)
+
+    console.log(`✅ Added ${amount} credits to user ${userId}, new balance: ${newBalance}`)
 
     return { success: true, balanceAfter: newBalance }
   }
