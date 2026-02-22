@@ -3,6 +3,7 @@
  * Manages user credits, transactions, and balance
  */
 
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 export interface CreditBalance {
@@ -27,13 +28,15 @@ export interface CreditTransaction {
 }
 
 class CreditsService {
-  private supabase: Awaited<ReturnType<typeof createClient>>
+  private supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>
 
   async initSupabase() {
     if (!this.supabase) {
-      this.supabase = await createClient()
+      // Use service role client (bypasses RLS) — required for webhook handlers
+      // Falls back to regular client if SUPABASE_SERVICE_ROLE_KEY is not set
+      this.supabase = createAdminClient() ?? await createClient()
     }
-    return this.supabase
+    return this.supabase!
   }
 
   /**
