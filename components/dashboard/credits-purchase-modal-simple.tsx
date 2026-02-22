@@ -58,21 +58,22 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
     }
   }
 
-  const handleBuyCredits = async (packageId: string) => {
+  const handlePayment = async () => {
+    if (!selectedPackageId) return
     if (!sdkLoaded) {
       alert('Payment system is still loading. Please try again in a moment.')
       return
     }
 
-    setSelectedPackageId(packageId)
-    await openCheckout(packageId)
-    setSelectedPackageId(null)
+    await openCheckout(selectedPackageId)
 
     // Refresh credits after a short delay
     setTimeout(() => {
       fetchData()
     }, 2000)
   }
+
+  const selectedPackage = packages.find((pkg) => pkg.id === selectedPackageId)
 
   // Calculate token equivalents for different models
   const tokenEstimates = credits ? {
@@ -124,13 +125,12 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
                 {packages.map((pkg) => (
                   <button
                     key={pkg.id}
-                    onClick={() => handleBuyCredits(pkg.id)}
-                    disabled={!sdkLoaded || isProcessing}
+                    onClick={() => setSelectedPackageId(pkg.id)}
                     className={`relative flex flex-col rounded-md border-2 p-2 text-left transition-all ${
                       selectedPackageId === pkg.id
                         ? 'border-primary bg-primary/5'
                         : 'border-border/50 hover:border-border bg-card'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    }`}
                   >
                     {/* Price */}
                     <div className="mb-1">
@@ -150,35 +150,41 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
                         ${(pkg.price_usd / pkg.credit_amount).toFixed(4)}/ea
                       </p>
                     </div>
-
-                    {/* Button */}
-                    {!sdkLoaded ? (
-                      <span className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                      </span>
-                    ) : isProcessing && selectedPackageId === pkg.id ? (
-                      <span className="flex items-center justify-center gap-1 text-xs text-primary font-medium">
-                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                      </span>
-                    ) : (
-                      <span className="text-xs font-semibold text-primary text-center">
-                        Buy
-                      </span>
-                    )}
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Action Button */}
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="w-full h-8 text-xs"
-          >
-            Cancel
-          </Button>
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-1">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="flex-1 h-8 text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePayment}
+              disabled={!selectedPackageId || isProcessing || !sdkLoaded}
+              className="flex-1 h-8 text-xs"
+            >
+              {!sdkLoaded ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                  Loading
+                </>
+              ) : isProcessing ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                  Processing
+                </>
+              ) : (
+                `Continue to Pay $${selectedPackage?.price_usd || '0'}`
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
