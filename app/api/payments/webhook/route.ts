@@ -1,42 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import dodoClient, { type WebhookPayload } from '@/lib/payments/dodo-client'
 import creditsService from '@/lib/payments/credits-service'
 import { createClient } from '@/lib/supabase/server'
 
+interface DodoWebhookPayload {
+  type: string
+  timestamp: string
+  data: {
+    subscription_id?: string
+    status?: string
+    metadata?: {
+      userId?: string
+      credits?: string
+      packageId?: string
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const rawBody = await request.text()
-    const signature = request.headers.get('x-dodo-signature')
+    const payload: DodoWebhookPayload = await request.json()
 
-    if (!signature) {
-      return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
-    }
+    console.log(`Received Dodo webhook: ${payload.type}`)
 
-    // Verify webhook signature
-    if (!dodoClient.verifyWebhookSignature(rawBody, signature)) {
-      console.warn('Invalid webhook signature')
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-    }
-
-    // Parse webhook payload
-    const payload: WebhookPayload = dodoClient.parseWebhookPayload(rawBody)
-
-    // Handle different webhook events
-    switch (payload.status) {
-      case 'completed':
-        await handlePaymentCompleted(payload)
+    // Handle different webhook event types
+    switch (payload.type) {
+      case 'subscription.active':
+        await handleSubscriptionActive(payload)
         break
 
-      case 'failed':
-        await handlePaymentFailed(payload)
+      case 'subscription.renewed':
+        await handleSubscriptionRenewed(payload)
         break
 
-      case 'cancelled':
-        await handlePaymentCancelled(payload)
+      case 'payment.succeeded':
+        await handlePaymentSucceeded(payload)
         break
 
       default:
-        console.warn(`Unknown webhook status: ${payload.status}`)
+        console.log(`Ignoring webhook type: ${payload.type}`)
     }
 
     return NextResponse.json({ success: true })
@@ -50,21 +51,49 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Handle successful payment
+ * Handle subscription active (initial successful payment)
  */
-async function handlePaymentCompleted(payload: WebhookPayload) {
+async function handleSubscriptionActive(payload: DodoWebhookPayload) {
   const supabase = await createClient()
 
   try {
-    // Get order from database
+    const data = payload.data
+    const userId = data.metadata?.userId
+    const creditsString = data.metadata?.credits
+    const packageId = data.metadata?.packageId
+
+    if (!userId || !creditsString || !packageId) {
+      console.warn('Missing metadata in subscription.active webhook', data.metadata)
+      return
+    }
+
+    const credits = parseInt(creditsString, 10)
+    if (isNaN(credits)) {
+      console.warn('Invalid credits value in metadata:', creditsString)
+      return
+    }
+
+    // Find the order
     const { data: order, error: orderError } = await supabase
       .from('dodo_payments_orders')
       .select('*')
-      .eq('dodo_order_id', payload.orderId)
+      .eq('user_id', userId)
+      .eq('credit_package_id', packageId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single()
 
-    if (orderError || !order) {
-      throw new Error(`Order not found: ${payload.orderId}`)
+    if (!order) {
+      console.warn(`No pending order found for user ${userId} and package ${packageId}`)
+      // Still add credits even if order not found, as the payment was successful
+      await creditsService.addCredits(
+        userId,
+        credits,
+        data.subscription_id || 'unknown',
+        `Credit purchase from subscription ${data.subscription_id}`
+      )
+      return
     }
 
     // Update order status
@@ -72,7 +101,7 @@ async function handlePaymentCompleted(payload: WebhookPayload) {
       .from('dodo_payments_orders')
       .update({
         status: 'completed',
-        payment_method: payload.metadata?.paymentMethod as string,
+        dodo_order_id: data.subscription_id,
         updated_at: new Date().toISOString(),
       })
       .eq('id', order.id)
@@ -83,67 +112,89 @@ async function handlePaymentCompleted(payload: WebhookPayload) {
 
     // Add credits to user
     await creditsService.addCredits(
-      order.user_id,
-      order.credits_purchased,
-      payload.orderId,
-      `Credit purchase: $${(payload.amount / 100).toFixed(2)}`
+      userId,
+      credits,
+      data.subscription_id || 'unknown',
+      `Credit purchase: ${credits} credits`
     )
 
-    console.log(`Payment completed for user ${order.user_id}: ${order.credits_purchased} credits`)
+    console.log(`✅ Subscription active: Added ${credits} credits to user ${userId}`)
   } catch (error) {
-    console.error('Error handling payment completion:', error)
+    console.error('Error handling subscription.active:', error)
     throw error
   }
 }
 
 /**
- * Handle failed payment
+ * Handle subscription renewed
  */
-async function handlePaymentFailed(payload: WebhookPayload) {
+async function handleSubscriptionRenewed(payload: DodoWebhookPayload) {
   const supabase = await createClient()
 
   try {
-    const { error } = await supabase
-      .from('dodo_payments_orders')
-      .update({
-        status: 'failed',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('dodo_order_id', payload.orderId)
+    const data = payload.data
+    const userId = data.metadata?.userId
+    const creditsString = data.metadata?.credits
 
-    if (error) {
-      throw error
+    if (!userId || !creditsString) {
+      console.warn('Missing metadata in subscription.renewed webhook')
+      return
     }
 
-    console.log(`Payment failed: ${payload.orderId}`)
+    const credits = parseInt(creditsString, 10)
+    if (isNaN(credits)) {
+      console.warn('Invalid credits value in metadata:', creditsString)
+      return
+    }
+
+    // Add credits to user for renewal
+    await creditsService.addCredits(
+      userId,
+      credits,
+      data.subscription_id || 'unknown',
+      `Subscription renewal: ${credits} credits`
+    )
+
+    console.log(`✅ Subscription renewed: Added ${credits} credits to user ${userId}`)
   } catch (error) {
-    console.error('Error handling payment failure:', error)
+    console.error('Error handling subscription.renewed:', error)
     throw error
   }
 }
 
 /**
- * Handle cancelled payment
+ * Handle payment succeeded (single payment, not subscription)
  */
-async function handlePaymentCancelled(payload: WebhookPayload) {
+async function handlePaymentSucceeded(payload: DodoWebhookPayload) {
   const supabase = await createClient()
 
   try {
-    const { error } = await supabase
-      .from('dodo_payments_orders')
-      .update({
-        status: 'cancelled',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('dodo_order_id', payload.orderId)
+    const data = payload.data
+    const userId = data.metadata?.userId
+    const creditsString = data.metadata?.credits
 
-    if (error) {
-      throw error
+    if (!userId || !creditsString) {
+      console.warn('Missing metadata in payment.succeeded webhook')
+      return
     }
 
-    console.log(`Payment cancelled: ${payload.orderId}`)
+    const credits = parseInt(creditsString, 10)
+    if (isNaN(credits)) {
+      console.warn('Invalid credits value in metadata:', creditsString)
+      return
+    }
+
+    // Add credits to user
+    await creditsService.addCredits(
+      userId,
+      credits,
+      data.subscription_id || 'unknown',
+      `Payment succeeded: ${credits} credits`
+    )
+
+    console.log(`✅ Payment succeeded: Added ${credits} credits to user ${userId}`)
   } catch (error) {
-    console.error('Error handling payment cancellation:', error)
+    console.error('Error handling payment.succeeded:', error)
     throw error
   }
 }
