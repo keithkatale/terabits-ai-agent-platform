@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Loader2, CheckCircle2, XCircle, Clock, Sparkles, Play, Square, Wrench, ArrowUp, Brain, ChevronDown, ChevronRight } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Clock, Sparkles, Play, Square, Wrench, ArrowUp, Brain, ChevronDown, ChevronRight, Coins } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 import { ToolCall } from '@/components/prompt-kit/tool-call'
 import { Markdown } from '@/components/prompt-kit/markdown'
+import { toast } from 'sonner'
+import { CreditsPurchaseModalSimple } from '@/components/dashboard/credits-purchase-modal-simple'
 
 // Friendly tool labels
 const TOOL_LABELS: Record<string, string> = {
@@ -34,7 +36,7 @@ interface AgentExecutionViewProps {
 
 interface ExecutionStep {
   id: string
-  type: 'thinking' | 'reasoning' | 'action' | 'result' | 'error' | 'tool'
+  type: 'thinking' | 'reasoning' | 'action' | 'result' | 'error' | 'tool' | 'credits'
   message: string
   timestamp: Date
   details?: string
@@ -86,6 +88,9 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
   const [activeTab, setActiveTab] = useState<'logs' | 'result'>('logs')
   const [finalOutput, setFinalOutput] = useState<any>(null)
   const [isExecuting, setIsExecuting] = useState(false)
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
+  const [creditsUsed, setCreditsUsed] = useState<number | null>(null)
+  const [showNoCreditsModal, setShowNoCreditsModal] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -94,12 +99,31 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
     }
   }, [steps])
 
+  // Fetch credit balance on component mount
+  useEffect(() => {
+    fetch('/api/user/credits')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setCreditBalance(data.balance?.balance ?? 0)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   const handleExecute = async () => {
+    // Check credits before execution
+    if (creditBalance !== null && creditBalance < 1) {
+      setShowNoCreditsModal(true)
+      return
+    }
+
     // Reset state for new execution
     setSteps([])
     setFinalOutput(null)
     setActiveTab('logs')
     setIsExecuting(true)
+    setCreditsUsed(null)
 
     // Validate required fields
     const hasRequiredFields = triggerConfig?.inputFields?.every(field =>
@@ -232,6 +256,25 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
                     message: data.error || 'An error occurred',
                     timestamp: new Date()
                   }])
+                } else if (data.type === 'credits_used') {
+                  setCreditsUsed(data.creditsUsed)
+                  setCreditBalance(data.balanceAfter)
+                  // Append credit summary step to logs
+                  setSteps(prev => [...prev, {
+                    id: `credits-${Date.now()}`,
+                    type: 'credits',
+                    message: `${data.creditsUsed} credit${data.creditsUsed !== 1 ? 's' : ''} used · ${data.balanceAfter} remaining`,
+                    timestamp: new Date(),
+                  }])
+                  // Show warning toast if balance is now 0
+                  if (data.balanceAfter < 1) {
+                    toast.error("You've used all your credits", {
+                      description: "Purchase more to keep running agents.",
+                      action: { label: "Buy Credits", onClick: () => setShowNoCreditsModal(true) },
+                    })
+                  } else if (data.balanceAfter < 10) {
+                    toast.warning(`Low credits: ${data.balanceAfter} remaining`)
+                  }
                 }
               } catch (e) {
                 console.error('Failed to parse SSE data:', e)
@@ -336,19 +379,33 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
     <div className="flex h-full flex-col bg-background">
       {/* Header */}
       <div className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold text-foreground">Agent Execution</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Watch your agent work in real-time
             </p>
           </div>
-          {isRunning && (
-            <Button variant="destructive" size="sm" onClick={onStop}>
-              <Square className="mr-2 h-4 w-4" />
-              Stop Agent
-            </Button>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Credits counter */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Coins className="h-3.5 w-3.5" />
+              {isExecuting ? (
+                <span className="animate-pulse">Counting credits...</span>
+              ) : creditsUsed !== null ? (
+                <span>{creditsUsed} used · <span className={creditBalance === 0 ? 'text-red-500 font-medium' : ''}>{creditBalance} left</span></span>
+              ) : creditBalance !== null ? (
+                <span>{creditBalance} credits</span>
+              ) : null}
+            </div>
+            {/* Stop Agent button */}
+            {isRunning && (
+              <Button variant="destructive" size="sm" onClick={onStop}>
+                <Square className="mr-2 h-4 w-4" />
+                Stop Agent
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -511,6 +568,15 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
                   )
                 }
 
+                if (step.type === 'credits') {
+                  return (
+                    <div key={step.id} className="flex items-center gap-2 px-1 text-xs text-primary/70">
+                      <Coins className="h-3.5 w-3.5" />
+                      <span>{step.message}</span>
+                    </div>
+                  )
+                }
+
                 return (
                   <div key={step.id} className="flex items-start gap-3 px-1">
                     <div className="mt-0.5 shrink-0">{getStepIcon(step.type)}</div>
@@ -577,6 +643,10 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
           )}
         </div>
       )}
+      <CreditsPurchaseModalSimple
+        isOpen={showNoCreditsModal}
+        onOpenChange={setShowNoCreditsModal}
+      />
     </div>
   )
 }

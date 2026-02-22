@@ -7,6 +7,8 @@ import { google } from '@ai-sdk/google'
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest } from 'next/server'
 import { getEnabledTools } from '@/lib/tools/catalog'
+import { useTokenCredits } from '@/lib/payments/use-token-credits'
+import creditsService from '@/lib/payments/credits-service'
 
 // Compact log entry stored alongside run output in the DB
 interface StoredLogEntry {
@@ -87,6 +89,12 @@ export async function POST(
 
   if (authError || !user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Check credits before execution
+  const creditBalance = await creditsService.getBalance(user.id)
+  if (!creditBalance || creditBalance.balance < 1) {
+    return Response.json({ error: 'Insufficient credits', code: 'NO_CREDITS' }, { status: 402 })
   }
 
   // Parse body
@@ -172,7 +180,7 @@ export async function POST(
         let stepIndex = 0
         let lastFinishReason = ''
         let totalStepsUsed = 0
-        let lastUsage: { totalTokens?: number } | undefined
+        let lastUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined
         const storedLogs: StoredLogEntry[] = []
 
         // Use `as any` to handle SDK v6 runtime field names that differ from typings
@@ -251,6 +259,33 @@ export async function POST(
           })
         }
 
+        // Deduct credits if execution succeeded
+        let creditsUsed = 0
+        let balanceAfter = creditBalance.balance
+        if (runLog?.id && !runError) {
+          try {
+            const creditResult = await useTokenCredits({
+              modelName: 'gemini-3-flash-preview',
+              promptTokens: lastUsage?.promptTokens ?? 0,
+              completionTokens: lastUsage?.completionTokens ?? 0,
+              executionId: runLog.id,
+              userId: user.id,
+              agentId: id,
+            })
+            creditsUsed = creditResult.creditsDeducted
+            balanceAfter = creditResult.remainingBalance
+            send({
+              type: 'credits_used',
+              creditsUsed,
+              balanceAfter,
+              totalTokens: lastUsage?.totalTokens ?? 0,
+              timestamp: Date.now()
+            })
+          } catch (err) {
+            console.error('Credit deduction failed (non-fatal):', err)
+          }
+        }
+
         // Persist run to execution_logs
         if (runLog?.id) {
           await supabase
@@ -262,6 +297,7 @@ export async function POST(
                 logs: storedLogs,
                 tool_calls_count: totalStepsUsed,
                 tokens_used: lastUsage?.totalTokens ?? null,
+                credits_used: creditsUsed,
               },
               error: runError,
               completed_at: new Date().toISOString(),

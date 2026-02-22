@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Crimson_Pro, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const dmSans = DM_Sans({
@@ -40,6 +41,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`font-sans antialiased ${dmSans.variable} ${crimsonPro.variable}`}>
         {children}
+        <Toaster />
         <Analytics />
       </body>
     </html>
