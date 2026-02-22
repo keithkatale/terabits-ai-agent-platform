@@ -64,7 +64,9 @@ export const aiImageGenerate = tool({
       }
 
       const data = await response.json()
-      console.log('[ai-image-generate] Full API response:', JSON.stringify(data, null, 2))
+      console.log('[ai-image-generate] API response received')
+      console.log('[ai-image-generate] Response keys:', Object.keys(data))
+      console.log('[ai-image-generate] Has candidates:', !!data.candidates)
 
       // Handle different possible response formats
       let imageBuffer: Buffer | null = null
@@ -72,46 +74,35 @@ export const aiImageGenerate = tool({
       // Format 1: candidates array with inlineData (standard generative API response)
       if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
         const candidate = data.candidates[0]
-        console.log('[ai-image-generate] Candidate structure:', {
-          hasContent: !!candidate.content,
-          hasParts: !!candidate.content?.parts,
-          partsLength: candidate.content?.parts?.length,
-          part0: candidate.content?.parts?.[0],
-        })
+        console.log('[ai-image-generate] First candidate keys:', Object.keys(candidate))
+        console.log('[ai-image-generate] Candidate.content keys:', Object.keys(candidate.content || {}))
 
-        // Check multiple possible locations for image data
-        const inlineData = candidate.content?.parts?.[0]?.inlineData
-        console.log('[ai-image-generate] InlineData:', {
-          exists: !!inlineData,
-          mimeType: inlineData?.mimeType,
-          dataLength: inlineData?.data?.length,
-        })
+        // Try all parts in the candidate
+        if (candidate.content?.parts && Array.isArray(candidate.content.parts)) {
+          for (let i = 0; i < candidate.content.parts.length; i++) {
+            const part = candidate.content.parts[i]
+            console.log(`[ai-image-generate] Part ${i} keys:`, Object.keys(part))
 
-        if (inlineData?.data) {
-          console.log('[ai-image-generate] ✓ Found image in candidates[0].content.parts[0].inlineData.data')
-          imageBuffer = Buffer.from(inlineData.data, 'base64')
-          console.log('[ai-image-generate] Buffer created, size:', imageBuffer.length)
-        } else {
-          console.log('[ai-image-generate] ✗ inlineData.data not found')
-          console.log('[ai-image-generate] candidate.content.parts[0]:', JSON.stringify(candidate.content?.parts?.[0], null, 2))
-        }
-      }
-
-      // Format 2: Direct images array (alternate format)
-      if (!imageBuffer && data.images && Array.isArray(data.images) && data.images.length > 0) {
-        const imageData = data.images[0]
-        if (imageData.image) {
-          console.log('[ai-image-generate] ✓ Found image in images[0].image')
-          imageBuffer = Buffer.from(imageData.image, 'base64')
+            // Check if this part has inlineData with an image
+            if (part.inlineData?.data) {
+              console.log(`[ai-image-generate] ✓ Found image data in part ${i}`)
+              try {
+                imageBuffer = Buffer.from(part.inlineData.data, 'base64')
+                console.log('[ai-image-generate] ✓ Successfully decoded image, size:', imageBuffer.length, 'bytes')
+                break
+              } catch (e) {
+                console.error('[ai-image-generate] Failed to decode base64:', e)
+              }
+            }
+          }
         }
       }
 
       if (!imageBuffer) {
-        console.error('[ai-image-generate] ✗ No image found. Full response:', JSON.stringify(data, null, 2))
+        console.error('[ai-image-generate] ✗ No image data found in response')
+        console.log('[ai-image-generate] Full response for debugging:', JSON.stringify(data).substring(0, 2000))
         throw new Error('Invalid API response: no image data found')
       }
-
-      console.log('[ai-image-generate] ✓ Successfully decoded image, size:', imageBuffer.length, 'bytes')
 
       const fileSizeKb = Math.round(imageBuffer.length / 1024)
 
