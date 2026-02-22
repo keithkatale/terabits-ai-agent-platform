@@ -83,86 +83,64 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>Buy Credits</DialogTitle>
-          <DialogDescription>
-            Purchase credits to run more AI agents or upgrade your plan
+      <DialogContent className="sm:max-w-2xl p-4">
+        <DialogHeader className="mb-3">
+          <DialogTitle className="text-lg">Buy Credits</DialogTitle>
+          <DialogDescription className="text-xs">
+            Purchase credits to run more AI agents
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-3">
           {/* Current Credits */}
           {isLoadingCredits ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
             </div>
           ) : (
-            <div className="rounded-lg border border-primary/30 bg-primary/8 p-6">
-              <p className="text-sm font-medium text-muted-foreground">Your Current Credits</p>
-              <p className="mt-3 text-3xl font-bold text-primary">
+            <div className="rounded-md border border-primary/30 bg-primary/8 p-3">
+              <p className="text-xs font-medium text-muted-foreground">Your Credits</p>
+              <p className="mt-1 text-2xl font-bold text-primary">
                 {credits?.toLocaleString() ?? '0'}
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                ≈ ${(credits ? credits * 0.003 : 0).toFixed(2)} USD value
+              <p className="text-xs text-muted-foreground">
+                ≈ ${(credits ? credits * 0.003 : 0).toFixed(2)} USD
               </p>
-
-              {/* Token Estimates */}
-              {tokenEstimates && (
-                <div className="mt-4 space-y-2 border-t border-primary/20 pt-4">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Token Estimates
-                  </p>
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    <p>
-                      <span className="font-medium">Gemini 3 Flash:</span> ~{tokenEstimates.geminiFlash.toLocaleString()} tokens
-                    </p>
-                    <p>
-                      <span className="font-medium">Claude Sonnet:</span> ~{tokenEstimates.claudeSonnet.toLocaleString()} tokens
-                    </p>
-                    <p>
-                      <span className="font-medium">Claude Opus:</span> ~{tokenEstimates.claudeOpus.toLocaleString()} tokens
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
           {/* Package Selection */}
-          <div className="space-y-4">
-            <p className="text-sm font-medium text-foreground">Select a Plan</p>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-foreground">Select a Plan</p>
 
             {isLoadingPackages ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
               </div>
             ) : packages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No packages available</p>
+              <p className="text-xs text-muted-foreground">No packages available</p>
             ) : (
-              <div className="grid gap-3 grid-cols-2">
+              <div className="grid gap-2 grid-cols-2">
                 {packages.map((pkg) => (
                   <button
                     key={pkg.id}
                     onClick={() => handleBuyCredits(pkg.id)}
                     disabled={!sdkLoaded || isProcessing}
-                    className={`relative flex flex-col rounded-lg border-2 p-3 text-left transition-all ${
+                    className={`relative flex flex-col rounded-md border-2 p-2 text-left transition-all ${
                       selectedPackageId === pkg.id
                         ? 'border-primary bg-primary/5'
                         : 'border-border/50 hover:border-border bg-card'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {/* Price */}
-                    <div className="mb-2">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-bold text-foreground">${pkg.price_usd}</span>
-                      </div>
+                    <div className="mb-1">
+                      <span className="text-xl font-bold text-foreground">${pkg.price_usd}</span>
                       <p className="text-xs text-muted-foreground">One-time</p>
                     </div>
 
                     {/* Credits */}
-                    <div className="mb-3 flex-1 rounded-md bg-primary/10 p-2">
-                      <div className="flex items-center gap-1.5 mb-1">
+                    <div className="mb-2 flex-1 rounded-sm bg-primary/10 p-1.5">
+                      <div className="flex items-center gap-1 mb-0.5">
                         <Zap className="h-3 w-3 text-primary" />
                         <span className="font-semibold text-foreground text-xs">
                           {pkg.credit_amount.toLocaleString()}
@@ -174,23 +152,19 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
                     </div>
 
                     {/* Button */}
-                    <div className="w-full">
-                      {!sdkLoaded ? (
-                        <span className="inline-flex items-center justify-center gap-1 text-xs text-muted-foreground">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Loading
-                        </span>
-                      ) : isProcessing && selectedPackageId === pkg.id ? (
-                        <span className="inline-flex items-center justify-center gap-1 text-xs text-primary font-medium">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Opening
-                        </span>
-                      ) : (
-                        <span className="text-xs font-semibold text-primary">
-                          Buy →
-                        </span>
-                      )}
-                    </div>
+                    {!sdkLoaded ? (
+                      <span className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                      </span>
+                    ) : isProcessing && selectedPackageId === pkg.id ? (
+                      <span className="flex items-center justify-center gap-1 text-xs text-primary font-medium">
+                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold text-primary text-center">
+                        Buy
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -198,15 +172,13 @@ export function CreditsPurchaseModalSimple({ isOpen, onOpenChange }: CreditsPurc
           </div>
 
           {/* Action Button */}
-          <div>
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="w-full"
-            >
-              Cancel
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="w-full h-8 text-xs"
+          >
+            Cancel
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
