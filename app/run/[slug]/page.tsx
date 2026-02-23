@@ -42,7 +42,7 @@ export default async function RuntimePage({ params }: { params: Promise<{ slug: 
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           <Image
-            src="/icon-nobg.svg"
+            src="/icon.svg"
             alt="Terabits"
             width={32}
             height={32}

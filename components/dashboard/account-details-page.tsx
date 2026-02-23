@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, ArrowLeft } from 'lucide-react'
+import { Loader2, ArrowLeft, Mail, CheckCircle, XCircle } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 interface AccountDetailsPageProps {
   user: User
@@ -39,12 +40,38 @@ export function AccountDetailsPage({
   const [creditsData, setCreditsData] = useState<CreditsData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [gmailConnected, setGmailConnected] = useState<boolean | null>(null)
+  const [gmailMessage, setGmailMessage] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   useEffect(() => {
     fetchCreditsData()
   }, [])
+
+  useEffect(() => {
+    fetch('/api/integrations/gmail/status')
+      .then((r) => r.json())
+      .then((d) => setGmailConnected(d.connected))
+      .catch(() => setGmailConnected(false))
+  }, [])
+
+  useEffect(() => {
+    const gmail = searchParams.get('gmail')
+    if (!gmail) return
+    if (gmail === 'connected') {
+      setGmailConnected(true)
+      setGmailMessage('Gmail connected. You can send email through your Gmail from agents.')
+    } else if (gmail === 'denied' || gmail === 'error') {
+      const err = searchParams.get('error') || (gmail === 'denied' ? 'Access was denied.' : 'Something went wrong.')
+      setGmailMessage(err)
+    }
+    const u = new URL(window.location.href)
+    u.searchParams.delete('gmail')
+    u.searchParams.delete('error')
+    window.history.replaceState({}, '', u.pathname + u.search)
+  }, [searchParams])
 
   const fetchCreditsData = async () => {
     setIsLoading(true)
@@ -61,6 +88,22 @@ export function AccountDetailsPage({
       setError('Failed to load credits information')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleGmailConnect = () => {
+    window.location.href = '/api/integrations/gmail/connect'
+  }
+
+  const handleGmailDisconnect = async () => {
+    try {
+      const res = await fetch('/api/integrations/gmail/disconnect', { method: 'POST' })
+      if (res.ok) {
+        setGmailConnected(false)
+        setGmailMessage(null)
+      }
+    } catch {
+      setGmailMessage('Failed to disconnect Gmail.')
     }
   }
 
@@ -114,6 +157,55 @@ export function AccountDetailsPage({
                   Email
                 </h3>
                 <p className="text-sm text-foreground break-all">{user.email}</p>
+              </div>
+            </div>
+
+            {/* Appearance / Theme */}
+            <div className="flex items-center justify-between rounded-lg border border-border/50 bg-card p-6">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Theme</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Switch between dark and light mode
+                </p>
+              </div>
+              <ThemeToggle variant="outline" size="icon" />
+            </div>
+
+            {/* Gmail integration */}
+            <div className="rounded-lg border border-border/50 bg-card p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Gmail</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Connect your Gmail so agents can send email on your behalf (from your Gmail address).
+              </p>
+              {gmailMessage && (
+                <p className={`text-xs flex items-center gap-1.5 ${gmailMessage.startsWith('Gmail connected') ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
+                  {gmailMessage.startsWith('Gmail connected') ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                  {gmailMessage}
+                </p>
+              )}
+              <div className="flex items-center gap-2 pt-1">
+                {gmailConnected === null ? (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…
+                  </span>
+                ) : gmailConnected ? (
+                  <>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                      Connected
+                    </span>
+                    <Button variant="outline" size="sm" onClick={handleGmailDisconnect}>
+                      Disconnect
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" onClick={handleGmailConnect}>
+                    Connect Gmail
+                  </Button>
+                )}
               </div>
             </div>
 

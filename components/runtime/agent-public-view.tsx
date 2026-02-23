@@ -327,6 +327,7 @@ export function AgentPublicView({
   const logsEndRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
   const logIdCounter = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const nextLogId = () => `log-${++logIdCounter.current}`
 
   useEffect(() => { stepsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [steps])
@@ -401,11 +402,15 @@ export function AgentPublicView({
     const pushLog = (entry: Omit<LogEntry, 'id'>) =>
       setLogs((prev) => [...prev, { id: nextLogId(), ...entry }])
 
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+
     try {
       const response = await fetch(`/api/public/${slug}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input }),
+        signal,
       })
 
       if (!response.ok) {
@@ -560,10 +565,20 @@ export function AgentPublicView({
         }
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Execution failed'
-      setExecutionError(msg)
-      setSteps((prev) => [...prev, { id: `error-${Date.now()}`, type: 'error', message: msg, timestamp: new Date() }])
-      pushLog({ kind: 'error', summary: msg, detail: msg, ts: Date.now() })
+      const isAbort = error instanceof Error && error.name === 'AbortError'
+      if (isAbort) {
+        setExecutionError('Run stopped.')
+        pushLog({ kind: 'done', summary: 'Stopped by user. Credits used have been applied.', ts: Date.now() })
+        toast.info('Run stopped. Credits used have been applied.')
+        if (isOwner) {
+          fetch('/api/user/credits').then(r => r.ok ? r.json() : null).then(data => { if (data?.balance?.balance != null) setCreditBalance(data.balance.balance) }).catch(() => {})
+        }
+      } else {
+        const msg = error instanceof Error ? error.message : 'Execution failed'
+        setExecutionError(msg)
+        setSteps((prev) => [...prev, { id: `error-${Date.now()}`, type: 'error', message: msg, timestamp: new Date() }])
+        pushLog({ kind: 'error', summary: msg, detail: msg, ts: Date.now() })
+      }
     } finally {
       setIsExecuting(false)
       // Refresh history 1.5s after run ends to give DB write time to complete
@@ -707,7 +722,7 @@ export function AgentPublicView({
       <header className="shrink-0 border-b border-border bg-card/80 backdrop-blur-sm">
         <div className="flex items-center gap-3 px-6 py-3.5">
           <Image
-            src="/icon-nobg.svg"
+            src="/icon.svg"
             alt="Terabits"
             width={36}
             height={36}
@@ -817,7 +832,11 @@ export function AgentPublicView({
                   if (step.type === 'thinking') return (
                     <div key={step.id} className="flex gap-3 px-1">
                       <Sparkles className="mt-1 h-4 w-4 shrink-0 text-blue-500" />
-                      <div className="text-sm italic leading-relaxed text-muted-foreground">{step.message}</div>
+                      <div className="flex-1 min-w-0 text-sm leading-relaxed text-muted-foreground">
+                        <Markdown className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-table:text-muted-foreground prose-a:text-primary">
+                          {step.message}
+                        </Markdown>
+                      </div>
                     </div>
                   )
                   if (step.type === 'error') return (
@@ -841,11 +860,19 @@ export function AgentPublicView({
                   return null
                 })}
                 {isExecuting && (
-                  <div className="flex items-center justify-center py-8">
+                  <div className="flex flex-col items-center justify-center gap-4 py-8">
                     <div className="flex animate-pulse items-center gap-2 rounded-full border border-primary/10 bg-primary/5 px-5 py-2.5">
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                       <span className="text-xs font-medium text-primary">Agent is working…</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => abortControllerRef.current?.abort()}
+                      className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/20"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      Stop run
+                    </button>
                   </div>
                 )}
                 {!isExecuting && executionError && (

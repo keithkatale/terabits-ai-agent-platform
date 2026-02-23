@@ -8,7 +8,7 @@ export function Footer() {
         <div className="flex flex-col items-center justify-between gap-8 md:gap-6 md:flex-row">
           <div className="flex items-center gap-3">
             <Image
-              src="/icon-nobg.svg"
+              src="/icon.svg"
               alt="Terabits"
               width={28}
               height={28}

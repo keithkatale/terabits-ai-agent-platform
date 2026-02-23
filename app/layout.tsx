@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Crimson_Pro, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
+import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
 const dmSans = DM_Sans({
@@ -22,8 +23,8 @@ export const metadata: Metadata = {
   title: 'Terabits - Build Your Next AI Employee',
   description: 'Build AI employees through natural conversation. No code, no APIs, no configuration. Just describe what you need and Terabits builds it for you.',
   icons: {
-    icon: '/favicon.png',
-    apple: '/favicon.png',
+    icon: '/Favicon-terabits.png',
+    apple: '/Favicon-terabits.png',
   },
 }
 
@@ -38,11 +39,18 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased ${dmSans.variable} ${crimsonPro.variable}`}>
-        {children}
-        <Toaster />
-        <Analytics />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          storageKey="terabits-theme"
+        >
+          {children}
+          <Toaster />
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   )

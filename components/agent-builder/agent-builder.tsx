@@ -8,6 +8,7 @@ import { ChatPanel } from '@/components/agent-builder/chat-panel'
 import { InstructionsPanel } from '@/components/agent-builder/instructions-panel'
 import { AgentExecutionView } from '@/components/agent-builder/agent-execution-view'
 import { DeployPopover } from '@/components/agent-builder/deploy-popover'
+import { TemplateSelect } from '@/components/agent-builder/template-select'
 import { ArrowLeft, Play } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 
@@ -48,7 +49,7 @@ export function AgentBuilder({ agent: initialAgent }: AgentBuilderProps) {
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
             <Image
-              src="/icon-nobg.svg"
+              src="/icon.svg"
               alt="Terabits"
               width={24}
               height={24}
@@ -65,6 +66,7 @@ export function AgentBuilder({ agent: initialAgent }: AgentBuilderProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <TemplateSelect agent={currentAgent} onAgentUpdate={handleAgentUpdate} />
           {/* Only show "Run Agent" for agents without a manual trigger (no inputFields).
               Agents with inputFields can be run directly from the Preview panel. */}
           {isReady && !hasManualTrigger && !isRunning && (

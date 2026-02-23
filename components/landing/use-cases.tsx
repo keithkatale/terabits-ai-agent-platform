@@ -37,31 +37,42 @@ export function UseCases() {
   return (
     <section id="use-cases" className="border-t border-border bg-muted/30 py-24 md:py-32">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-            AI employees for every role
-          </h2>
-          <p className="mt-4 text-pretty text-lg text-muted-foreground">
-            From customer support to data analysis, build the team you need.
-          </p>
-        </div>
+        <div className="grid gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 lg:items-start">
+          {/* Left: sticky title — stays in place while the right column scrolls */}
+          <div className="lg:sticky lg:top-28">
+            <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground md:text-4xl lg:text-4xl xl:text-5xl">
+              AI employees for every role
+            </h2>
+            <p className="mt-4 max-w-md text-pretty text-lg text-muted-foreground">
+              From customer support to data analysis, build the team you need.
+            </p>
+          </div>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {useCases.map((uc) => (
-            <Card key={uc.title} className="bg-card transition-shadow hover:shadow-md">
-              <CardHeader>
-                <div className="mb-2 inline-flex self-start rounded-full bg-primary/10 px-2.5 py-0.5">
-                  <span className="text-xs font-medium text-primary">{uc.tag}</span>
-                </div>
-                <CardTitle className="text-lg">{uc.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {uc.description}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+          {/* Right: scrolling feature cards */}
+          <div className="flex flex-col gap-5">
+            {useCases.map((uc) => (
+              <Card
+                key={uc.title}
+                className="group overflow-hidden border border-border/80 bg-card shadow-sm transition-all duration-200 hover:border-primary/20 hover:shadow-md"
+              >
+                <CardHeader className="pb-2">
+                  <div className="mb-3 inline-flex w-fit rounded-full bg-primary/12 px-3 py-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+                      {uc.tag}
+                    </span>
+                  </div>
+                  <CardTitle className="text-xl tracking-tight text-foreground">
+                    {uc.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {uc.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     </section>

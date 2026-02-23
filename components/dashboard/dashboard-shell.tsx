@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/ui/logo'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { CreditsCounter } from './credits-counter'
 import { CreditsPurchaseModalSimple } from './credits-purchase-modal-simple'
 import { AccountDetailsPage } from './account-details-page'
@@ -62,6 +63,7 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
           </div>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle variant="ghost" size="icon-sm" />
             {/* Credits Counter - Opens Purchase Modal */}
             <CreditsCounter onCounterClick={() => setIsCreditsModalOpen(true)} />
 
@@ -75,7 +77,7 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
             {/* Profile Icon - Navigates to Account Page */}
             <button
               onClick={() => setCurrentPage('account')}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium text-account-foreground transition-colors hover:bg-secondary/80"
               title="Open account details"
             >
               {initials}

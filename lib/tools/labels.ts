@@ -8,6 +8,7 @@ export const TOOL_LABELS: Record<string, string> = {
   rss_reader: 'RSS / News Reader',
   http_request: 'HTTP Request',
   send_email: 'Send Email',
+  gmail_send: 'Send via Gmail',
   ai_extract: 'Extract Data (AI)',
   ai_summarize: 'Summarize (AI)',
   ai_image_generate: 'Generate Image',

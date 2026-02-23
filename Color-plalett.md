@@ -1,4 +1,8 @@
+# Terabits color palette (Claude-inspired stone)
 
+**Default theme:** Dark. Users can switch to Light via the theme toggle (landing header; dashboard navbar and Account details).
+
+---
 
 Color Palette
 TokenLight ModeDark ModeUsage--background#F4F3EE (Pampas)#1C1917 (warm black)

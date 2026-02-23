@@ -18,7 +18,7 @@ export function Logo({ size = 'md', withText = false, href }: LogoProps) {
   const logoContent = (
     <div className="flex items-center gap-2">
       <Image
-        src="/icon-nobg.svg"
+        src="/icon.svg"
         alt="Terabits"
         width={dimensions.width}
         height={dimensions.height}

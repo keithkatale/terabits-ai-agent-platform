@@ -92,6 +92,7 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
   const [creditsUsed, setCreditsUsed] = useState<number | null>(null)
   const [showNoCreditsModal, setShowNoCreditsModal] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -151,6 +152,9 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
     }
     setSteps((prev) => [...prev, userStep])
 
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+
     try {
       const response = await fetch(`/api/agents/${agent.id}/execute`, {
         method: 'POST',
@@ -159,6 +163,7 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
           input,
           stream: true
         }),
+        signal,
       })
 
       if (!response.ok) throw new Error('Execution failed')
@@ -284,15 +289,31 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
         }
       }
     } catch (error) {
-      setSteps(prev => [...prev, {
-        id: `error-${Date.now()}`,
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Something went wrong',
-        timestamp: new Date()
-      }])
+      const isAbort = error instanceof Error && error.name === 'AbortError'
+      if (isAbort) {
+        setSteps(prev => [...prev, {
+          id: `stopped-${Date.now()}`,
+          type: 'error',
+          message: 'Run stopped. Credits used have been applied.',
+          timestamp: new Date()
+        }])
+        toast.info('Run stopped. Credits used have been applied.')
+      } else {
+        setSteps(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Something went wrong',
+          timestamp: new Date()
+        }])
+      }
     } finally {
       setIsExecuting(false)
     }
+  }
+
+  const handleStop = () => {
+    abortControllerRef.current?.abort()
+    onStop()
   }
 
   const getStepIcon = (type: ExecutionStep['type']) => {
@@ -400,7 +421,7 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
             </div>
             {/* Stop Agent button */}
             {isRunning && (
-              <Button variant="destructive" size="sm" onClick={onStop}>
+              <Button variant="destructive" size="sm" onClick={handleStop}>
                 <Square className="mr-2 h-4 w-4" />
                 Stop Agent
               </Button>

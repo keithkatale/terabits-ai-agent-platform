@@ -11,6 +11,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { ImageCard } from '@/components/ui/image-card'
+import { Markdown } from '@/components/prompt-kit/markdown'
 
 type ToolState = 'pending' | 'running' | 'completed' | 'error'
 
@@ -22,6 +23,20 @@ interface ToolCallProps {
   errorText?: string
   defaultOpen?: boolean
   className?: string
+}
+
+/** If output is a single string or object with one string value (e.g. result, content, text), return it for Markdown rendering */
+function getOutputAsString(output: Record<string, unknown>): string | null {
+  if (!output || typeof output !== 'object') return null
+  const keys = Object.keys(output)
+  if (keys.length === 0) return null
+  if (keys.length === 1) {
+    const v = output[keys[0]]
+    if (typeof v === 'string' && v.trim().length > 0) return v
+  }
+  const preferred = (output.result ?? output.content ?? output.text ?? output.output) as unknown
+  if (typeof preferred === 'string' && preferred.trim().length > 0) return preferred
+  return null
 }
 
 const stateConfig: Record<
@@ -106,11 +121,21 @@ export function ToolCall({
                     showPrompt={true}
                   />
                 </div>
-              ) : (
-                <pre className="mt-1 rounded-md bg-background p-2 text-[11px] leading-relaxed text-foreground overflow-x-auto">
-                  {JSON.stringify(output, null, 2)}
-                </pre>
-              )}
+              ) : (() => {
+                const str = getOutputAsString(output)
+                if (str != null) {
+                  return (
+                    <div className="mt-1 rounded-md bg-background p-2 text-[11px] leading-relaxed text-foreground overflow-x-auto prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-table:text-foreground prose-a:text-primary">
+                      <Markdown>{str}</Markdown>
+                    </div>
+                  )
+                }
+                return (
+                  <pre className="mt-1 rounded-md bg-background p-2 text-[11px] leading-relaxed text-foreground overflow-x-auto">
+                    {JSON.stringify(output, null, 2)}
+                  </pre>
+                )
+              })()}
             </div>
           )}
           {errorText && (

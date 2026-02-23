@@ -62,6 +62,16 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     category: 'web',
     status: 'coming_soon',
   },
+  {
+    name: 'browser_automation',
+    label: 'Browser automation',
+    description:
+      'Navigate the web, fill forms, and click elements in a real browser. Enables agents to complete web tasks that require login or interaction (e.g. get a receipt, create an order).',
+    icon: 'Globe',
+    category: 'web',
+    status: 'coming_soon',
+    envVars: ['ENABLE_BROWSER_AUTOMATION'],
+  },
 
   // ─── Actions ──────────────────────────────────────────────────────────────
   {
@@ -89,8 +99,8 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     description: 'Post messages to a Slack channel via a bot or incoming webhook.',
     icon: 'MessageSquare',
     category: 'communication',
-    status: 'coming_soon',
-    envVars: ['SLACK_BOT_TOKEN'],
+    status: 'available',
+    envVars: ['SLACK_BOT_TOKEN', 'SLACK_WEBHOOK_URL'],
   },
   {
     name: 'telegram_message',
@@ -116,8 +126,18 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     description: 'Post messages to a Discord channel via a webhook.',
     icon: 'Hash',
     category: 'communication',
-    status: 'coming_soon',
+    status: 'available',
     envVars: ['DISCORD_WEBHOOK_URL'],
+  },
+  {
+    name: 'gmail_send',
+    label: 'Send via Gmail',
+    description:
+      "Send email through the user's connected Gmail account. Recipients see the email as from the user's Gmail. User must connect Gmail in account settings first.",
+    icon: 'Mail',
+    category: 'communication',
+    status: 'available',
+    envVars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
   },
 
   // ─── AI Processing ────────────────────────────────────────────────────────

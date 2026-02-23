@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest } from 'next/server'
 import { getEnabledTools } from '@/lib/tools/catalog'
+import { runWithExecutionContext } from '@/lib/execution-context'
 import { useTokenCredits } from '@/lib/payments/use-token-credits'
 import creditsService from '@/lib/payments/credits-service'
 import { normalizeUsage, addUsage } from '@/lib/ai/usage'
@@ -46,8 +47,9 @@ You are running as a live AI agent. You have a maximum of 25 tool-call steps. Fo
 3. **Handle failures gracefully.** If a tool fails, explain the failure, try an alternative approach, and never silently skip required information.
 4. **Write partial results early for large requests.** If the user asks for a large list (20+ items), write your compiled results to the output after every 5–8 searches — do NOT wait until all data is gathered. This prevents silent failure if steps run out.
 5. **Never exhaust all steps on tool calls alone.** Reserve at least 2–3 steps for writing your final output. If you have used 20+ steps and still have data to write, stop searching and write what you have.
-6. **Self-review before finishing.** Before concluding, verify the output is grounded in real data, not assumptions.
-7. **End with a status line.** Your very last sentence must be one of:
+6. **Do not loop or repeat.** Never repeat the same phrase, sentence, or action. If you notice yourself saying or doing the same thing twice in a row, stop immediately and output your current results (or a brief status). Do not say "Wait, I'll do it" or similar more than once — take action or write output instead.
+7. **Self-review before finishing.** Before concluding, verify the output is grounded in real data, not assumptions.
+8. **End with a status line.** Your very last sentence must be one of:
    - ✅ Task completed successfully.
    - ⚠️ Partial completion — [specific reason/what's missing].
    - ❌ Task failed — [specific reason why it could not be completed].`
@@ -137,15 +139,18 @@ export async function POST(
     runLogId = runLog?.id ?? null
   }
 
-  // Stream SSE
+  const requestSignal = req.signal
+
+  // Stream SSE (execution context so tools like gmail_send can use authenticated user when present)
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (data: object) => controller.enqueue(sse(data))
+      await runWithExecutionContext({ userId: user?.id ?? null }, async () => {
+        const send = (data: object) => controller.enqueue(sse(data))
 
-      send({ type: 'start', agentName: agent.name, runId: runLogId, creditBalance: userCreditBalance, timestamp: Date.now() })
+        send({ type: 'start', agentName: agent.name, runId: runLogId, creditBalance: userCreditBalance, timestamp: Date.now() })
 
-      try {
-        const result = streamText({
+        try {
+          const result = streamText({
           model: google('gemini-3-flash-preview'),
           system: systemPrompt,
           messages: [{ role: 'user', content: userMessage }],
@@ -168,8 +173,13 @@ export async function POST(
         let totalStepsUsed = 0
         const storedLogs: StoredLogEntry[] = []
         let accumulatedUsage = normalizeUsage(undefined)
+        let aborted = false
 
         for await (const part of result.fullStream) {
+          if (requestSignal.aborted) {
+            aborted = true
+            break
+          }
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const p = part as any
           const kind: string = p.type
@@ -215,20 +225,24 @@ export async function POST(
         }
 
         let runError: string | null = null
-        if (lastFinishReason === 'tool-calls' && !finalText.trim()) {
+        if (aborted) {
+          runError = 'Run stopped by user.'
+          storedLogs.push({ kind: 'error', summary: runError, ts: Date.now() })
+          send({ type: 'error', error: runError, timestamp: Date.now() })
+        } else if (lastFinishReason === 'tool-calls' && !finalText.trim()) {
           runError = `Step limit reached after ${totalStepsUsed} tool calls. Try requesting fewer items or break the request into smaller batches.`
           storedLogs.push({ kind: 'error', summary: runError, ts: Date.now() })
           send({ type: 'error', error: runError, timestamp: Date.now() })
-        } else {
+        } else if (!aborted) {
           send({ type: 'complete', result: { output: { result: finalText } }, timestamp: Date.now() })
         }
 
-        // Deduct credits if user is authenticated and execution succeeded
+        // Deduct credits for usage so far (whether completed, aborted, or error)
         let creditsUsed = 0
         let balanceAfter = userCreditBalance ?? 0
         let aiCostUsd = 0
         let platformCostUsd = 0
-        if (user && runLogId && !runError) {
+        if (user && runLogId && (usage.promptTokens > 0 || usage.completionTokens > 0)) {
           try {
             const creditResult = await useTokenCredits({
               modelName: 'gemini-3-flash-preview',
@@ -258,12 +272,13 @@ export async function POST(
           }
         }
 
-        // Persist run result
+        // Persist run result (including when aborted — so tokens/credits are recorded)
+        const finalStatus = aborted ? 'aborted' : (runError ? 'error' : 'completed')
         if (adminDb && runLogId) {
           await adminDb
             .from('execution_logs')
             .update({
-              status: runError ? 'error' : 'completed',
+              status: finalStatus,
               output: {
                 result: finalText,
                 logs: storedLogs,
@@ -278,19 +293,20 @@ export async function POST(
             })
             .eq('id', runLogId)
         }
-      } catch (e) {
-        console.error('Public agent execution error:', e)
-        const errMsg = e instanceof Error ? e.message : 'Agent execution failed'
-        send({ type: 'error', error: errMsg, timestamp: Date.now() })
-        if (adminDb && runLogId) {
-          await adminDb
-            .from('execution_logs')
-            .update({ status: 'error', error: errMsg, completed_at: new Date().toISOString() })
-            .eq('id', runLogId)
+        } catch (e) {
+          console.error('Public agent execution error:', e)
+          const errMsg = e instanceof Error ? e.message : 'Agent execution failed'
+          send({ type: 'error', error: errMsg, timestamp: Date.now() })
+          if (adminDb && runLogId) {
+            await adminDb
+              .from('execution_logs')
+              .update({ status: 'error', error: errMsg, completed_at: new Date().toISOString() })
+              .eq('id', runLogId)
+          }
+        } finally {
+          controller.close()
         }
-      } finally {
-        controller.close()
-      }
+      })
     },
   })
 
