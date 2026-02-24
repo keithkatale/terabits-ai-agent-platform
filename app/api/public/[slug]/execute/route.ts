@@ -38,21 +38,13 @@ function buildExecutionSystemPrompt(instructionPrompt: string): string {
 
 ---
 
-## Execution Behaviour
+## Critical Rules
 
-You are running as a live AI agent. You have a maximum of 25 tool-call steps. Follow these rules:
-
-1. **Use tools proactively.** When you need current information, use \`web_search\` then \`web_scrape\` to read full articles.
-2. **Be transparent.** Narrate each step as you work so the user can follow your reasoning.
-3. **Handle failures gracefully.** If a tool fails, explain the failure, try an alternative approach, and never silently skip required information.
-4. **Write partial results early for large requests.** If the user asks for a large list (20+ items), write your compiled results to the output after every 5–8 searches — do NOT wait until all data is gathered. This prevents silent failure if steps run out.
-5. **Never exhaust all steps on tool calls alone.** Reserve at least 2–3 steps for writing your final output. If you have used 20+ steps and still have data to write, stop searching and write what you have.
-6. **Do not loop or repeat.** Never repeat the same phrase, sentence, or action. If you notice yourself saying or doing the same thing twice in a row, stop immediately and output your current results (or a brief status). Do not say "Wait, I'll do it" or similar more than once — take action or write output instead.
-7. **Self-review before finishing.** Before concluding, verify the output is grounded in real data, not assumptions.
-8. **End with a status line.** Your very last sentence must be one of:
-   - ✅ Task completed successfully.
-   - ⚠️ Partial completion — [specific reason/what's missing].
-   - ❌ Task failed — [specific reason why it could not be completed].`
+- Use tools to gather real data. Do not make up information.
+- For large lists (20+ items): write results as you go — every 5–8 items — do not wait until the end.
+- If you have used 20+ tool steps, stop gathering and write your output now with what you have.
+- Do not repeat tool calls with the same arguments.
+- End your response with exactly one of: ✅ Task completed. / ⚠️ Partial — [reason]. / ❌ Failed — [reason].`
 }
 
 function formatUserInput(input: Record<string, unknown>): string {
@@ -156,7 +148,7 @@ export async function POST(
           messages: [{ role: 'user', content: userMessage }],
           tools: Object.keys(tools).length > 0 ? tools : undefined,
           toolChoice: 'auto',
-          stopWhen: stepCountIs(25),
+          stopWhen: stepCountIs(50),
           providerOptions: {
             google: {
               thinkingConfig: {
@@ -230,7 +222,7 @@ export async function POST(
           storedLogs.push({ kind: 'error', summary: runError, ts: Date.now() })
           send({ type: 'error', error: runError, timestamp: Date.now() })
         } else if (lastFinishReason === 'tool-calls' && !finalText.trim()) {
-          runError = `Step limit reached after ${totalStepsUsed} tool calls. Try requesting fewer items or break the request into smaller batches.`
+          runError = `Step limit reached after ${totalStepsUsed} tool calls (max 50). Try requesting fewer items or break the request into smaller batches.`
           storedLogs.push({ kind: 'error', summary: runError, ts: Date.now() })
           send({ type: 'error', error: runError, timestamp: Date.now() })
         } else if (!aborted) {

@@ -3,12 +3,12 @@ import Image from 'next/image'
 
 export function Footer() {
   return (
-    <footer className="border-t border-border bg-muted/30 py-16">
+    <footer className="border-t border-border bg-muted/30 py-16 pb-safe">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <div className="flex flex-col items-center justify-between gap-8 md:gap-6 md:flex-row">
           <div className="flex items-center gap-3">
             <Image
-              src="/icon.svg"
+              src="/server.png"
               alt="Terabits"
               width={28}
               height={28}

@@ -89,9 +89,12 @@ export async function POST(req: Request) {
         execute: async ({ agentName: name, description, category, instructionPrompt, inputFields }) => {
           const toolConfig = {
             web_search: { enabled: true },
-            ai_process: { enabled: true },
-            read: { enabled: true },
-            write: { enabled: false },
+            web_scrape: { enabled: true },
+            ai_extract: { enabled: true },
+            ai_summarize: { enabled: true },
+            ai_image_generate: { enabled: true },
+            http_request: { enabled: true },
+            rss_reader: { enabled: true },
           }
 
           const executionContext = {

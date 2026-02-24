@@ -28,8 +28,8 @@ import {
   Coins,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Markdown } from '@/components/prompt-kit/markdown'
-import { ToolCall } from '@/components/prompt-kit/tool-call'
+import { Markdown } from '@/components/ai-elements/markdown'
+import { Tool } from '@/components/ai-elements/tool'
 import { CreditsPurchaseModalSimple } from '@/components/dashboard/credits-purchase-modal-simple'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -92,6 +92,8 @@ interface HistoricRun {
 export interface AgentPublicViewProps {
   slug: string
   agentId: string
+  /** When set, used for /agent/[slug] links (e.g. Builder). Otherwise agentId is used. */
+  agentSlug?: string
   name: string
   description: string | null
   executionContext: Record<string, unknown> | null
@@ -299,11 +301,13 @@ function renderResult(data: unknown): React.ReactNode {
 export function AgentPublicView({
   slug,
   agentId,
+  agentSlug,
   name,
   description,
   executionContext,
   isOwner = false,
 }: AgentPublicViewProps) {
+  const agentPath = agentSlug ?? agentId
   const router = useRouter()
   const [view, setView] = useState<PublicView>('form')
   const [rightPanel, setRightPanel] = useState<RightPanel>('live')
@@ -367,7 +371,7 @@ export function AgentPublicView({
     try {
       const res = await fetch(`/api/agents/${agentId}/deploy`, { method: 'DELETE' })
       if (res.ok) {
-        router.push(`/agent/${agentId}`)
+        router.push(`/agent/${agentPath}`)
         router.refresh()
       }
     } finally {
@@ -708,7 +712,7 @@ export function AgentPublicView({
               {isUndeploying ? 'Undeploying…' : 'Undeploy & Edit'}
             </button>
             <a
-              href={`/agent/${agentId}`}
+              href={`/agent/${agentPath}`}
               className="flex items-center gap-1 rounded-md border border-amber-500/20 px-2.5 py-1 text-xs text-amber-600 transition-colors hover:bg-amber-500/10"
             >
               <ArrowUpRight className="h-3 w-3" />
@@ -722,7 +726,7 @@ export function AgentPublicView({
       <header className="shrink-0 border-b border-border bg-card/80 backdrop-blur-sm">
         <div className="flex items-center gap-3 px-6 py-3.5">
           <Image
-            src="/icon.svg"
+            src="/server.png"
             alt="Terabits"
             width={36}
             height={36}
@@ -828,7 +832,7 @@ export function AgentPublicView({
               <div className="space-y-3">
                 {steps.map((step) => {
                   if (step.type === 'reasoning') return <ReasoningBlock key={step.id} text={step.message} isStreaming={isExecuting} />
-                  if (step.type === 'tool' && step.toolData) return <ToolCall key={step.id} name={step.toolData.name} state={step.toolData.state} input={step.toolData.input} output={step.toolData.output} defaultOpen={false} />
+                  if (step.type === 'tool' && step.toolData) return <Tool key={step.id} name={step.toolData.name} state={step.toolData.state} input={step.toolData.input} output={step.toolData.output} defaultOpen={false} />
                   if (step.type === 'thinking') return (
                     <div key={step.id} className="flex gap-3 px-1">
                       <Sparkles className="mt-1 h-4 w-4 shrink-0 text-blue-500" />

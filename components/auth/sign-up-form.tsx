@@ -18,7 +18,7 @@ export function SignUpForm() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextUrl = searchParams.get('next') || '/dashboard'
+  const nextUrl = searchParams.get('next') || '/chat'
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()

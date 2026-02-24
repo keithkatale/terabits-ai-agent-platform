@@ -23,7 +23,7 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect_to') || '/dashboard'
+  const redirectTo = searchParams.get('redirect_to') || '/chat'
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,7 +52,7 @@ function LoginForm() {
           <div className="flex flex-col items-center gap-2">
             <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-foreground">
               <Image
-                src="/icon.svg"
+                src="/server.png"
                 alt="Terabits"
                 width={32}
                 height={32}

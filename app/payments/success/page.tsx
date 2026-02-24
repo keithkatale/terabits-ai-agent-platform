@@ -34,7 +34,7 @@ function SuccessContent() {
 
         {/* Actions */}
         <div className="space-y-3">
-          <Link href="/dashboard">
+          <Link href="/chat">
             <Button className="w-full" size="lg">
               Go to Dashboard
             </Button>

@@ -23,14 +23,18 @@ export const metadata: Metadata = {
   title: 'Terabits - Build Your Next AI Employee',
   description: 'Build AI employees through natural conversation. No code, no APIs, no configuration. Just describe what you need and Terabits builds it for you.',
   icons: {
-    icon: '/Favicon-terabits.png',
-    apple: '/Favicon-terabits.png',
+    icon: '/server.png',
+    apple: '/server.png',
   },
 }
 
 export const viewport: Viewport = {
-  themeColor: '#c15f3c',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: '#121215',
   userScalable: false,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

@@ -78,7 +78,7 @@ export function AgentList({ agents }: AgentListProps) {
 
   if (agents.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-20">
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-20">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -87,12 +87,12 @@ export function AgentList({ agents }: AgentListProps) {
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
         </div>
-        <h3 className="mt-4 text-lg font-semibold text-foreground">No AI employees yet</h3>
+        <h3 className="mt-4 text-lg font-semibold text-foreground">No sub-agents yet</h3>
         <p className="mt-2 max-w-sm text-center text-sm text-muted-foreground">
-          Start a conversation to hire your first AI employee. Just describe the role and we will build it for you.
+          Create a sub-agent from the Assistant by describing a repetitive task, or build one here.
         </p>
         <Link href="/agent/new" className="mt-6">
-          <Button>Hire your first employee</Button>
+          <Button>New sub-agent</Button>
         </Link>
       </div>
     )
@@ -107,7 +107,7 @@ export function AgentList({ agents }: AgentListProps) {
 
           return (
             <div key={agent.id} className="group relative">
-              <Link href={`/agent/${agent.id}`}>
+              <Link href={`/agent/${agent.slug ?? agent.id}`}>
                 <Card className="h-full transition-shadow hover:shadow-md">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
@@ -156,10 +156,10 @@ export function AgentList({ agents }: AgentListProps) {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete AI Employee?</AlertDialogTitle>
+            <AlertDialogTitle>Delete sub-agent?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{agentToDelete?.name}"? This action cannot be undone.
-              All workflows, skills, and conversation history will be permanently deleted.
+              All configuration, skills, and conversation history for this sub-agent will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

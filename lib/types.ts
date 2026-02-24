@@ -9,6 +9,8 @@ export interface Profile {
 
 export interface Agent {
   id: string
+  /** Public URL id, format a_************. Used for /agent/[slug]. */
+  slug?: string
   user_id: string
   name: string
   description: string | null
@@ -25,6 +27,30 @@ export interface Agent {
   instruction_prompt?: string | null
   tool_config?: Record<string, unknown>
   execution_context?: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+/** Saved repeatable task: instructions + form inputs. Created from chat "Save this workflow?". */
+export interface Workflow {
+  id: string
+  user_id: string
+  slug: string
+  name: string
+  description: string | null
+  instruction_prompt: string
+  tool_config?: Record<string, unknown>
+  execution_context?: Record<string, unknown>
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+/** Conversation with the platform agent. Messages belong to a chat. */
+export interface Chat {
+  id: string
+  user_id: string
+  title: string | null
   created_at: string
   updated_at: string
 }

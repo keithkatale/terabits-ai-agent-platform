@@ -66,11 +66,11 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     name: 'browser_automation',
     label: 'Browser automation',
     description:
-      'Navigate the web, fill forms, and click elements in a real browser. Enables agents to complete web tasks that require login or interaction (e.g. get a receipt, create an order).',
+      'Navigate the web, fill forms, and click elements in a real browser. Requires browser worker (Railway/Render/Fly.io) and BROWSER_WORKER_URL.',
     icon: 'Globe',
     category: 'web',
     status: 'coming_soon',
-    envVars: ['ENABLE_BROWSER_AUTOMATION'],
+    envVars: ['ENABLE_BROWSER_AUTOMATION', 'BROWSER_WORKER_URL'],
   },
 
   // ─── Actions ──────────────────────────────────────────────────────────────

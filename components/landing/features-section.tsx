@@ -9,23 +9,23 @@ interface Feature {
 const features: Feature[] = [
   {
     icon: '/icons-points/wisker.png',
-    title: 'Build AI quickly',
-    description: 'Describe what you need and Terabits builds it in minutes, not weeks. No coding required.',
+    title: 'Do things, not just chat',
+    description: 'Ask it to search the web, send emails, look things up, or call APIs. It performs the task and reports back.',
   },
   {
     icon: '/icons-points/pages.png',
-    title: 'Deploy instantly',
-    description: 'Your AI agent is ready to work immediately. Share it, integrate it, or run it anytime.',
+    title: 'Saved workflows',
+    description: 'Turn repeat tasks into one-click workflows. Run them anytime or share with your team.',
   },
   {
     icon: '/icons-points/doc.png',
-    title: 'Manage with ease',
-    description: 'Monitor performance, adjust instructions, and track execution logs all in one place.',
+    title: 'Transparent steps',
+    description: 'See what the assistant is doing: reasoning, tool calls, and results right in the chat.',
   },
   {
     icon: '/icons-points/hand.png',
-    title: 'Scalable foundation',
-    description: 'Start simple and grow. Add more agents, integrate APIs, and automate your entire workflow.',
+    title: 'One assistant, many tools',
+    description: 'Web search, Gmail, Slack, Discord, HTTP, images, and more. One place to delegate digital tasks.',
   },
 ]
 
@@ -39,7 +39,7 @@ export function FeaturesSection() {
             <div className="relative w-full max-w-md">
               <Image
                 src="/images/person-on-computer.avif"
-                alt="Person building AI agents"
+                alt="Person using AI assistant"
                 width={500}
                 height={600}
                 className="rounded-3xl w-full h-auto"
@@ -52,10 +52,10 @@ export function FeaturesSection() {
           <div className="flex flex-col gap-10 justify-start">
             <div className="space-y-4">
               <h2 className="font-serif text-5xl md:text-6xl font-bold text-foreground leading-tight">
-                Built for entrepreneurs
+                Task-oriented, like a real assistant
               </h2>
               <p className="text-lg text-muted-foreground leading-relaxed max-w-md">
-                Terabits makes building AI agents as easy as describing what you need. No technical barriers, no code to write. Just describe your vision and we handle the rest.
+                Tell it what to do — book research, send that email, look something up. It uses the right tools, performs the action, and gives you a clear result.
               </p>
             </div>
 

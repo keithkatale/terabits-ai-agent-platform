@@ -5,16 +5,22 @@ import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type { UIMessage } from 'ai'
 import { Button } from '@/components/ui/button'
-import { ArrowUp, Sparkles, Brain, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowUp, Sparkles, Brain, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { Markdown } from '@/components/prompt-kit/markdown'
-import { ThinkingBar } from '@/components/prompt-kit/thinking-bar'
-import { ToolCall } from '@/components/prompt-kit/tool-call'
+import { Markdown } from '@/components/ai-elements/markdown'
+import { Tool } from '@/components/ai-elements/tool'
 import type { Agent } from '@/lib/types'
 
 const TOOL_LABELS: Record<string, string> = {
   saveInstructions: 'Writing agent instructions',
 }
+
+const ASSISTANT_SUGGESTIONS = [
+  'Search the web for the latest news on AI agents',
+  'Send an email to remind me about the meeting',
+  'Summarise this article: [paste URL]',
+  'Find 5 competitors for project management software',
+]
 
 interface ChatPanelProps {
   agent: Agent
@@ -96,11 +102,21 @@ function ReasoningBlock({ text, isStreaming }: { text: string; isStreaming: bool
 
 export function ChatPanel({ agent, onAgentUpdate, isFullWidth }: ChatPanelProps) {
   const [inputValue, setInputValue] = useState('')
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const initialPromptSent = useRef(false)
   const processedToolCalls = useRef<Set<string>>(new Set())
   const messagesLoadedRef = useRef(false)
+
+  useEffect(() => {
+    fetch('/api/user/credits')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.balance != null) setCreditBalance(d.balance?.balance ?? d.balance ?? null)
+      })
+      .catch(() => {})
+  }, [])
 
   const transport = useMemo(
     () =>
@@ -300,7 +316,7 @@ export function ChatPanel({ agent, onAgentUpdate, isFullWidth }: ChatPanelProps)
     }
   }
 
-  const containerClass = isFullWidth ? 'mx-auto w-full max-w-2xl px-4' : 'w-full px-4'
+  const containerClass = isFullWidth ? 'mx-auto w-full max-w-4xl px-4' : 'w-full px-4'
   const isWorking = status === 'submitted' || status === 'streaming'
 
   return (
@@ -308,28 +324,23 @@ export function ChatPanel({ agent, onAgentUpdate, isFullWidth }: ChatPanelProps)
       {/* Messages */}
       <div className="flex-1 overflow-y-auto pb-36">
         {messages.length === 0 ? (
-          /* Empty state */
+          /* Empty state — same as main /agent page */
           <div className="flex h-full flex-col items-center justify-center px-4">
             <div className={containerClass}>
               <div className="flex flex-col items-center gap-4 text-center">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-                  <Sparkles className="h-5 w-5 text-primary-foreground" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
+                  <Sparkles className="h-6 w-6 text-primary-foreground" />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-foreground">
-                    What should your agent do?
+                    What do you want me to do?
                   </h2>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    Describe the task and I'll write the instructions that power it.
+                    I can search the web, send emails, look things up, call APIs, and more. You’ll see each step and tool as I work.
                   </p>
                 </div>
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  {[
-                    'Customer support agent for my online store',
-                    'Weekly content writer for social media',
-                    'Research assistant that summarises articles',
-                    'Invoice processing automation',
-                  ].map((s) => (
+                  {ASSISTANT_SUGGESTIONS.map((s) => (
                     <button
                       key={s}
                       onClick={() => setInputValue(s)}
@@ -343,113 +354,100 @@ export function ChatPanel({ agent, onAgentUpdate, isFullWidth }: ChatPanelProps)
             </div>
           </div>
         ) : (
-          <div className={`py-6 ${containerClass}`}>
-            <div className="space-y-5">
-              {messages.map((message: UIMessage) => {
-                // User message
-                if (message.role === 'user') {
-                  const text = (message.parts ?? [])
-                    .filter((p: any) => p.type === 'text')
-                    .map((p: any) => p.text)
-                    .join('')
-                  return (
-                    <div key={message.id} className="flex justify-end">
-                      <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground">
+          <div className="mx-auto w-full max-w-4xl py-6 px-4 space-y-6">
+            {messages.map((message: UIMessage) => {
+              if (message.role === 'user') {
+                const text = (message.parts ?? [])
+                  .filter((p: any) => p.type === 'text')
+                  .map((p: any) => p.text)
+                  .join('')
+                return (
+                  <div key={message.id}>
+                    <div className="flex justify-end">
+                      <div className="max-w-[85%] rounded-lg rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground">
                         <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
                       </div>
                     </div>
-                  )
-                }
-
-                // Assistant message
-                const parts = message.parts ?? []
-                return (
-                  <div key={message.id} className="flex gap-3">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 mt-0.5">
-                      <span className="text-[10px] font-bold text-primary">T</span>
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2.5">
-                      {parts.map((part: any, i: number) => {
-                        // Reasoning tokens
-                        if (part.type === 'reasoning') {
-                          return (
-                            <ReasoningBlock
-                              key={i}
-                              text={String(part.reasoning ?? part.text ?? '')}
-                              isStreaming={isWorking && i === parts.length - 1}
-                            />
-                          )
-                        }
-
-                        // Tool invocations
-                        const inv = getToolInvocation(part)
-                        if (inv) {
-                          const toolState =
-                            inv.state === 'output-available'
-                              ? 'completed'
-                              : inv.state === 'output-error'
-                                ? 'error'
-                                : 'running'
-                          return (
-                            <ToolCall
-                              key={i}
-                              name={TOOL_LABELS[inv.toolName] ?? inv.toolName}
-                              state={toolState as 'pending' | 'running' | 'completed' | 'error'}
-                              defaultOpen={false}
-                            />
-                          )
-                        }
-
-                        // Text
-                        if (part.type === 'text' && part.text) {
-                          return (
-                            <Markdown key={i} id={`${message.id}-${i}`}>
-                              {String(part.text)}
-                            </Markdown>
-                          )
-                        }
-
-                        return null
-                      })}
-                    </div>
                   </div>
                 )
-              })}
+              }
 
-              {/* Thinking indicator */}
-              {isWorking && (
-                <div className="flex gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <span className="text-[10px] font-bold text-primary">T</span>
-                  </div>
-                  <div className="flex-1">
-                    <ThinkingBar text="Working on your agent" />
-                  </div>
+              const parts = message.parts ?? []
+              return (
+                <div key={message.id} className="w-full space-y-2.5">
+                  {parts.map((part: any, i: number) => {
+                    if (part.type === 'reasoning') {
+                      return (
+                        <ReasoningBlock
+                          key={i}
+                          text={String(part.reasoning ?? part.text ?? '')}
+                          isStreaming={isWorking && i === parts.length - 1}
+                        />
+                      )
+                    }
+
+                    const inv = getToolInvocation(part)
+                    if (inv) {
+                      const toolState =
+                        inv.state === 'output-available'
+                          ? 'completed'
+                          : inv.state === 'output-error'
+                            ? 'error'
+                            : 'running'
+                      return (
+                        <Tool
+                          key={i}
+                          name={TOOL_LABELS[inv.toolName] ?? inv.toolName}
+                          state={toolState as 'pending' | 'running' | 'completed' | 'error'}
+                          defaultOpen={false}
+                        />
+                      )
+                    }
+
+                    if (part.type === 'text' && part.text) {
+                      return (
+                        <div key={i} className="overflow-x-auto rounded-lg border border-border/50 bg-muted/10 p-4 text-[15px] font-medium leading-relaxed [&_.markdown-table-wrapper]:min-w-0">
+                          <Markdown id={`${message.id}-${i}`}>{String(part.text)}</Markdown>
+                        </div>
+                      )
+                    }
+
+                    return null
+                  })}
                 </div>
-              )}
-            </div>
+              )
+            })}
+
+            {isWorking && (
+              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Working on it…</span>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
-      {/* Floating input */}
+      {/* Floating input — same as /agent (AssistantChat) */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center pb-3">
         <div className={`pointer-events-auto w-full ${containerClass}`}>
           <form onSubmit={handleSubmit}>
-            <div className="relative rounded-2xl border border-border bg-card shadow-lg backdrop-blur-sm transition-all focus-within:border-primary/30 focus-within:shadow-xl">
+            <div className="relative rounded-lg border border-border bg-card shadow-lg backdrop-blur-sm transition-all focus-within:border-primary/30 focus-within:shadow-xl">
               <textarea
                 ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Describe what your agent should do..."
+                placeholder="Ask me to do something…"
                 disabled={status !== 'ready'}
                 rows={1}
-                className="w-full resize-none rounded-2xl bg-transparent px-4 pt-3.5 pb-12 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
+                className="w-full resize-none rounded-lg bg-transparent px-4 pt-3.5 pb-12 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
               />
               <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground/40">Gemini 3 Flash</span>
+                <span className="text-[11px] text-muted-foreground/40">
+                  {creditBalance != null ? `${creditBalance} credits` : ''}
+                </span>
                 <Button
                   type="submit"
                   size="icon"
@@ -462,9 +460,6 @@ export function ChatPanel({ agent, onAgentUpdate, isFullWidth }: ChatPanelProps)
               </div>
             </div>
           </form>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground/40">
-            Terabits AI can make mistakes. Review your agent before deploying.
-          </p>
         </div>
       </div>
     </div>

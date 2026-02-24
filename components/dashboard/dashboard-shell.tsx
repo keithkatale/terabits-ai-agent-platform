@@ -2,92 +2,109 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { usePathname } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/ui/logo'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { CreditsCounter } from './credits-counter'
 import { CreditsPurchaseModalSimple } from './credits-purchase-modal-simple'
 import { AccountDetailsPage } from './account-details-page'
+import { SidebarCollapseProvider, useSidebarCollapse } from './sidebar-collapse-context'
+import { HeaderTitleProvider, useHeaderTitle } from './header-title-context'
+import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
+
+function SidebarColumn({ sidebar }: { sidebar: React.ReactNode }) {
+  const collapse = useSidebarCollapse()
+  const collapsed = collapse?.collapsed ?? false
+  return (
+    <div
+      className={cn(
+        'hidden h-full shrink-0 flex-col border-r border-border bg-background dark:bg-input/30 transition-[width] duration-200 ease-out md:flex',
+        collapsed ? 'w-16' : 'w-[260px]'
+      )}
+    >
+      {sidebar}
+    </div>
+  )
+}
 
 interface DashboardShellProps {
   user: User
   profile: Profile | null
   children: React.ReactNode
+  /** When set, left sidebar is full viewport height; header + main are only in the right column (top bar ends where sidebar begins). */
+  sidebar?: React.ReactNode
 }
 
-export function DashboardShell({ user, profile, children }: DashboardShellProps) {
-  const pathname = usePathname()
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'account'>('dashboard')
-  const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false)
+/** Renders the top bar; when sidebar is present, logo only shows when sidebar is collapsed (avoids duplication). */
+function DashboardHeader({
+  sidebarPresent,
+  headerRight,
+}: {
+  sidebarPresent: boolean
+  headerRight: React.ReactNode
+}) {
+  const { title: headerTitle } = useHeaderTitle()
+  const collapse = useSidebarCollapse()
+  const sidebarCollapsed = collapse?.collapsed ?? false
 
-  const navItems = [
-    { href: '/dashboard', label: 'My Employees' },
-  ]
+  const showLogoInTopBar = sidebarPresent
+    ? sidebarCollapsed && !headerTitle
+    : !headerTitle
 
-  const initials = profile?.full_name
-    ? profile.full_name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2)
-    : user.email?.[0]?.toUpperCase() ?? 'U'
+  const headerLeft = headerTitle ? (
+    <span className="truncate text-sm font-semibold text-foreground" title={headerTitle}>
+      {headerTitle}
+    </span>
+  ) : showLogoInTopBar ? (
+    <Link href={sidebarPresent ? '/workflow' : '/chat'} className="flex min-w-0 flex-1 items-center justify-start">
+      {sidebarPresent && sidebarCollapsed ? (
+        <span className="text-sm font-semibold text-foreground">Terabits</span>
+      ) : (
+        <Logo size="xs" withText />
+      )}
+    </Link>
+  ) : null
 
   return (
-    <div className="flex min-h-svh flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard">
-              <Logo size="md" withText />
-            </Link>
-            <nav className="hidden items-center gap-1 md:flex">
-              {navItems.map((item) => (
-                <button
-                  key={item.href}
-                  onClick={() => setCurrentPage('dashboard')}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    currentPage === 'dashboard'
-                      ? 'bg-secondary text-secondary-foreground'
-                      : 'text-foreground hover:bg-secondary/50'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle variant="ghost" size="icon-sm" />
-            {/* Credits Counter - Opens Purchase Modal */}
-            <CreditsCounter onCounterClick={() => setIsCreditsModalOpen(true)} />
-
-            <Link href="/agent/new">
-              <Button size="sm">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5"><path d="M12 5v14M5 12h14" /></svg>
-                New Employee
-              </Button>
-            </Link>
-
-            {/* Profile Icon - Navigates to Account Page */}
-            <button
-              onClick={() => setCurrentPage('account')}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium text-account-foreground transition-colors hover:bg-secondary/80"
-              title="Open account details"
-            >
-              {initials}
-            </button>
-          </div>
+    <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-background backdrop-blur-sm pt-safe">
+      <div className="flex h-12 w-full items-center justify-between gap-3 px-4 md:h-10 md:px-6">
+        <div className="flex min-w-0 flex-1 items-center justify-start">
+          {headerLeft}
         </div>
-      </header>
+        {headerRight}
+      </div>
+    </header>
+  )
+}
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-auto">
+/** Renders header + main; must be inside HeaderTitleProvider so useHeaderTitle() sees the workflow title. */
+function DashboardShellInner({ user, profile, children, sidebar, currentPage, setCurrentPage, isCreditsModalOpen, setIsCreditsModalOpen, initials }: DashboardShellProps & {
+  currentPage: 'dashboard' | 'account'
+  setCurrentPage: (p: 'dashboard' | 'account') => void
+  isCreditsModalOpen: boolean
+  setIsCreditsModalOpen: (v: boolean) => void
+  initials: string
+}) {
+  const headerRight = (
+    <div className="flex items-center gap-1 md:gap-3">
+      <ThemeToggle variant="ghost" size="icon-sm" className="touch-target flex md:size-8" />
+      <CreditsCounter onCounterClick={() => setIsCreditsModalOpen(true)} />
+      <button
+        onClick={() => setCurrentPage('account')}
+        className="touch-target flex shrink-0 items-center justify-center rounded-lg border-0 bg-secondary text-[10px] font-medium text-account-foreground transition-colors hover:bg-secondary/80 md:h-7 md:w-7 md:min-h-0 md:min-w-0"
+        title="Open account details"
+      >
+        {initials}
+      </button>
+    </div>
+  )
+
+  const headerAndMain = (
+    <>
+      <DashboardHeader sidebarPresent={sidebar != null} headerRight={headerRight} />
+
+      <main className="min-h-0 flex-1 overflow-hidden pb-safe px-safe">
         {currentPage === 'account' ? (
           <AccountDetailsPage
             user={user}
@@ -99,12 +116,64 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
           children
         )}
       </main>
+    </>
+  )
 
-      {/* Credits Purchase Modal */}
+  if (sidebar != null) {
+    return (
+      <SidebarCollapseProvider>
+        <div className="flex h-svh overflow-hidden">
+          <SidebarColumn sidebar={sidebar} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {headerAndMain}
+          </div>
+        </div>
+        <CreditsPurchaseModalSimple
+          isOpen={isCreditsModalOpen}
+          onOpenChange={setIsCreditsModalOpen}
+        />
+      </SidebarCollapseProvider>
+    )
+  }
+
+  return (
+    <div className="flex min-h-svh flex-col">
+      {headerAndMain}
       <CreditsPurchaseModalSimple
         isOpen={isCreditsModalOpen}
         onOpenChange={setIsCreditsModalOpen}
       />
     </div>
+  )
+}
+
+export function DashboardShell({ user, profile, children, sidebar }: DashboardShellProps) {
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'account'>('dashboard')
+  const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false)
+
+  const initials = profile?.full_name
+    ? profile.full_name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : user.email?.[0]?.toUpperCase() ?? 'U'
+
+  return (
+    <HeaderTitleProvider>
+      <DashboardShellInner
+        user={user}
+        profile={profile}
+        sidebar={sidebar}
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        isCreditsModalOpen={isCreditsModalOpen}
+        setIsCreditsModalOpen={setIsCreditsModalOpen}
+        initials={initials}
+      >
+        {children}
+      </DashboardShellInner>
+    </HeaderTitleProvider>
   )
 }

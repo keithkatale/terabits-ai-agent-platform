@@ -18,7 +18,7 @@ function SignUpPageContent() {
           <div className="flex flex-col items-center gap-2">
             <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-foreground">
               <Image
-                src="/icon.svg"
+                src="/server.png"
                 alt="Terabits"
                 width={32}
                 height={32}

@@ -113,7 +113,7 @@ export function RuntimeChat({ agentId, agentName }: RuntimeChatProps) {
       </div>
 
       <div className="border-t border-border bg-card px-4 py-4">
-        <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl items-center gap-2">
+        <form onSubmit={handleSubmit} className="mx-auto flex max-w-xl items-center gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}

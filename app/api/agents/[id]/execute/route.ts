@@ -8,8 +8,8 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest } from 'next/server'
 import { getEnabledTools } from '@/lib/tools/catalog'
 import { runWithExecutionContext } from '@/lib/execution-context'
-import { useTokenCredits } from '@/lib/payments/use-token-credits'
 import creditsService from '@/lib/payments/credits-service'
+import { tokenConverter } from '@/lib/payments/token-to-credit-converter'
 import { normalizeUsage, addUsage } from '@/lib/ai/usage'
 
 // Compact log entry stored alongside run output in the DB
@@ -41,26 +41,13 @@ function buildExecutionSystemPrompt(
 
 ---
 
-## Execution Behaviour
+## Critical Rules
 
-You are running as a live AI agent. You have a maximum of 25 tool-call steps. Follow these rules:
-
-1. **Use tools proactively.** When you need current information, use \`web_search\` then \`web_scrape\` to read full articles.
-2. **Be transparent.** Narrate each step as you work so the user can follow your reasoning.
-3. **Handle failures gracefully.** If a tool fails, explain the failure, try an alternative approach, and never silently skip required information.
-4. **Write partial results early for large requests.** If the user asks for a large list (20+ items), write your compiled results to the output after every 5–8 searches — do NOT wait until all data is gathered. This prevents silent failure if steps run out.
-5. **Never exhaust all steps on tool calls alone.** Reserve at least 2–3 steps for writing your final output. If you have used 20+ steps and still have data to write, stop searching and write what you have.
-6. **Do not loop or repeat.** Never repeat the same phrase, sentence, or action. If you notice yourself saying or doing the same thing twice in a row, stop immediately and output your current results (or a brief status). Do not say "Wait, I'll do it" or similar more than once — take action or write output instead.
-7. **Self-review before finishing.** Before concluding, verify:
-   - Did you actually complete what was requested based on the input?
-   - Is your output grounded in real data, not assumptions?
-   - Are there any gaps or errors in your response?
-8. **End with a status line.** Your very last sentence must be one of:
-   - ✅ Task completed successfully.
-   - ⚠️ Partial completion — [specific reason/what's missing].
-   - ❌ Task failed — [specific reason why it could not be completed].
-
-Do NOT claim "✅ Task completed" if you encountered blocking errors or could not fulfill the core request.`
+- Use tools to gather real data. Do not make up information.
+- For large lists (20+ items): write results as you go — every 5–8 items — do not wait until the end.
+- If you have used 20+ tool steps, stop gathering and write your output now with what you have.
+- Do not repeat tool calls with the same arguments.
+- End your response with exactly one of: ✅ Task completed. / ⚠️ Partial — [reason]. / ❌ Failed — [reason].`
 }
 
 // ── Input formatter ───────────────────────────────────────────────────────────
@@ -171,7 +158,7 @@ export async function POST(
             messages: [{ role: 'user', content: userMessage }],
             tools: Object.keys(tools).length > 0 ? tools : undefined,
             toolChoice: 'auto',
-            stopWhen: stepCountIs(25),
+            stopWhen: stepCountIs(50),
             providerOptions: {
               google: {
                 thinkingConfig: {
@@ -202,12 +189,14 @@ export async function POST(
           const p = part as any
           const kind: string = p.type
 
-          if (kind === 'reasoning') {
+          if (kind === 'reasoning' || kind === 'reasoning-delta') {
             send({
               type: 'reasoning',
               delta: p.textDelta ?? p.text ?? '',
               timestamp: Date.now(),
             })
+          } else if (kind === 'reasoning-start') {
+            send({ type: 'reasoning', delta: '', timestamp: Date.now() })
           } else if (kind === 'text-delta') {
             const delta: string = p.textDelta ?? p.text ?? ''
             finalText += delta
@@ -280,7 +269,7 @@ export async function POST(
           storedLogs.push({ kind: 'error', summary: runError, ts: Date.now() })
           send({ type: 'error', error: runError, timestamp: Date.now() })
         } else if (lastFinishReason === 'tool-calls' && !finalText.trim()) {
-          runError = `Step limit reached after ${totalStepsUsed} tool calls. The agent spent all available steps gathering data and had no steps left to write output. Try requesting fewer items (e.g. "top 20" instead of a large number), or break the request into smaller batches.`
+          runError = `Step limit reached after ${totalStepsUsed} tool calls (max 50). The agent spent all available steps gathering data and had no steps left to write output. Try requesting fewer items or break the request into smaller batches.`
           storedLogs.push({ kind: 'error', summary: runError, ts: Date.now() })
           send({ type: 'error', error: runError, timestamp: Date.now() })
         } else {
@@ -291,27 +280,32 @@ export async function POST(
           })
         }
 
-        // Deduct credits for usage so far (whether completed, aborted, or error)
+        // Deduct credits for usage (current DB: execution_logs.credits_used)
+        const modelName = 'gemini-3-flash-preview'
         let creditsUsed = 0
         let balanceAfter = creditBalance.balance
         if (runLog?.id && (usage.promptTokens > 0 || usage.completionTokens > 0)) {
           try {
-            const creditResult = await useTokenCredits({
-              modelName: 'gemini-3-flash-preview',
+            const costCalc = await tokenConverter.calculateCredits(modelName, {
               promptTokens: usage.promptTokens,
               completionTokens: usage.completionTokens,
-              executionId: runLog.id,
-              userId: user.id,
-              agentId: id,
             })
-            creditsUsed = creditResult.creditsDeducted
-            balanceAfter = creditResult.remainingBalance
+            const toDeduct = costCalc.creditsConsumed
+            const deductResult = await creditsService.deductCredits(
+              user.id,
+              toDeduct,
+              `Agent execution: ${toDeduct} credits (${usage.promptTokens + usage.completionTokens} tokens @ ${modelName})`,
+              id,
+              runLog.id
+            )
+            creditsUsed = toDeduct
+            balanceAfter = deductResult.balanceAfter
             send({
               type: 'credits_used',
               creditsUsed,
               balanceAfter,
               totalTokens: usage.totalTokens,
-              timestamp: Date.now()
+              timestamp: Date.now(),
             })
           } catch (err) {
             console.error('Credit deduction failed (non-fatal):', err)

@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Loader2, CheckCircle2, XCircle, Clock, Sparkles, Play, Square, Wrench, ArrowUp, Brain, ChevronDown, ChevronRight, Coins } from 'lucide-react'
 import type { Agent } from '@/lib/types'
-import { ToolCall } from '@/components/prompt-kit/tool-call'
-import { Markdown } from '@/components/prompt-kit/markdown'
+import { Tool } from '@/components/ai-elements/tool'
+import { Markdown } from '@/components/ai-elements/markdown'
 import { toast } from 'sonner'
 import { CreditsPurchaseModalSimple } from '@/components/dashboard/credits-purchase-modal-simple'
 
@@ -532,7 +532,7 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
               {renderResult(finalOutput)}
             </div>
           ) : (
-            <div className="space-y-3 max-w-2xl mx-auto">
+            <div className="space-y-3 max-w-xl mx-auto">
               {steps.map((step) => {
                 // Reasoning block — collapsible, with streaming indicator
                 if (step.type === 'reasoning') {
@@ -547,7 +547,7 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
 
                 if (step.type === 'tool' && step.toolData) {
                   return (
-                    <ToolCall
+                    <Tool
                       key={step.id}
                       name={step.toolData.name}
                       state={step.toolData.state}
@@ -647,7 +647,7 @@ export function AgentExecutionView({ agent, isRunning, onStop, triggerConfig }: 
               </Button>
             </div>
           ) : (
-            <div className="flex gap-3 max-w-2xl mx-auto w-full">
+            <div className="flex gap-3 max-w-xl mx-auto w-full">
               <input
                 type="text"
                 value={inputValues['default'] || ''}

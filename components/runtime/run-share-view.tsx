@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Sparkles, Clock, Zap, ExternalLink, Copy, Check } from 'lucide-react'
-import { Markdown } from '@/components/prompt-kit/markdown'
+import { Markdown } from '@/components/ai-elements/markdown'
 
 interface RunShareViewProps {
   runId: string

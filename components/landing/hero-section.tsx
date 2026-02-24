@@ -3,34 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowUp, Briefcase, MessageSquare, BarChart3, Clock, Search, Sparkles, Loader2 } from 'lucide-react'
-import RotatingText from '@/components/ui/rotating-text'
 
 const suggestions = [
-  {
-    icon: Briefcase,
-    label: 'Customer Support',
-    prompt: 'I need an AI employee to handle customer support emails and live chat',
-  },
-  {
-    icon: MessageSquare,
-    label: 'Content Creator',
-    prompt: 'I want an AI that writes blog posts and social media content weekly',
-  },
-  {
-    icon: BarChart3,
-    label: 'Data Analyst',
-    prompt: 'I need someone to analyze our sales data and generate weekly reports',
-  },
-  {
-    icon: Clock,
-    label: 'Task Automator',
-    prompt: 'I want to automate our invoice processing and follow-up workflows',
-  },
-  {
-    icon: Search,
-    label: 'Researcher',
-    prompt: 'I need an AI to research market trends and compile competitor analysis',
-  },
+  { icon: Search, label: 'Search', prompt: 'Search the web for the latest news on AI agents' },
+  { icon: MessageSquare, label: 'Email', prompt: 'Send an email to remind me about the meeting tomorrow' },
+  { icon: BarChart3, label: 'Research', prompt: 'Find 5 competitors for project management software' },
+  { icon: Briefcase, label: 'Summarise', prompt: 'Summarise this article for me: [paste URL]' },
+  { icon: Clock, label: 'Task', prompt: 'Look up the weather in London and tell me if I need an umbrella' },
 ]
 
 export function HeroSection() {
@@ -42,10 +21,11 @@ export function HeroSection() {
     const text = promptText || input
     if (!text.trim() || isSubmitting) return
     setIsSubmitting(true)
-
-    // Store the initial prompt in sessionStorage so the agent builder can pick it up
-    sessionStorage.setItem('terabits_initial_prompt', text.trim())
-    router.push('/agent/new')
+    // Send user to the assistant chat; optional: pass initial message via query
+    const params = new URLSearchParams()
+    if (text.trim()) params.set('q', text.trim().slice(0, 500))
+    router.push(`/chat${params.toString() ? `?${params.toString()}` : ''}`)
+    setIsSubmitting(false)
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -57,45 +37,21 @@ export function HeroSection() {
 
   return (
     <section className="flex min-h-[calc(100svh-4rem)] flex-col items-center justify-center px-4 py-16 md:px-6">
-      <div className="mx-auto flex w-full max-w-2xl flex-col items-center">
+      <div className="mx-auto flex w-full max-w-xl flex-col items-center">
         {/* Badge */}
         <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-medium text-muted-foreground">AI Agents</span>
+          <span className="text-xs font-medium text-muted-foreground">AI Assistant</span>
         </div>
 
         {/* Headline */}
-        <h1 className="font-serif text-center text-5xl font-bold tracking-tight text-foreground md:text-6xl md:whitespace-nowrap lg:text-7xl leading-[1.15]">
-          Build your next{' '}
-          {/*
-           * Grid-stack: both children share [grid-area:1/1].
-           * The ghost text ("AI co-worker") is the widest phrase and
-           * fixes the container width. RotatingText centers inside it.
-           */}
-          <span className="inline-grid text-primary relative">
-            <span
-              className="invisible select-none whitespace-nowrap [grid-area:1/1] pointer-events-none"
-              aria-hidden="true"
-            >
-              AI co-worker
-            </span>
-            <span className="[grid-area:1/1] flex items-center">
-              <RotatingText
-                texts={['AI agent', 'AI co-worker', 'AI teammate', 'AI colleague']}
-                splitBy="words"
-                mainClassName="whitespace-nowrap"
-                rotationInterval={2500}
-                transition={{ type: 'spring', damping: 20, stiffness: 250 }}
-                initial={{ y: '110%', opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: '-110%', opacity: 0 }}
-              />
-            </span>
-          </span>
+        <h1 className="font-serif text-center text-5xl font-bold tracking-tight text-foreground md:text-6xl lg:text-7xl leading-[1.15]">
+          Your AI assistant that{' '}
+          <span className="text-primary">does things</span>
         </h1>
 
         <p className="mt-4 max-w-lg text-center text-base leading-relaxed text-muted-foreground">
-          Describe the role you need filled. No code, no APIs, no setup required.
+          Ask it to do something — search the web, send emails, look things up. It performs the task and reports back.
         </p>
 
         {/* Main Input Area */}
@@ -105,7 +61,7 @@ export function HeroSection() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Describe what you want your AI agent to do..."
+              placeholder="Ask me to do something… e.g. Search for X, send an email, look up Y"
               rows={3}
               className="w-full resize-none rounded-2xl bg-transparent px-5 pt-5 pb-14 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
             />
@@ -117,7 +73,7 @@ export function HeroSection() {
                 onClick={() => handleSubmit()}
                 disabled={!input.trim() || isSubmitting}
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity disabled:opacity-30 hover:opacity-90"
-                aria-label="Start building"
+                aria-label="Go to assistant"
               >
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

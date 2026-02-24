@@ -40,7 +40,7 @@ export function AuthNavbar() {
 
   if (isAuthenticated) {
     return (
-      <Link href="/dashboard">
+      <Link href="/chat">
         <Button size="sm">Dashboard</Button>
       </Link>
     )

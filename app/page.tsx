@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { createClient } from '@/lib/supabase/server'
 import { HeroSection } from '@/components/landing/hero-section'
 import { FeaturesSection } from '@/components/landing/features-section'
 import { HowItWorksSection } from '@/components/landing/how-it-works-section'
@@ -9,15 +10,41 @@ import { IntegrationsMarquee } from '@/components/landing/integrations-marquee'
 import { Footer } from '@/components/landing/footer'
 import { AuthNavbar } from '@/components/landing/auth-navbar'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { DashboardShell } from '@/components/dashboard/dashboard-shell'
+import { DashboardChatSidebar } from '@/components/dashboard/dashboard-chat-sidebar'
+import { AssistantChat } from '@/components/dashboard/assistant-chat'
 
-export default function LandingPage() {
+export default async function HomePage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+
+    return (
+      <DashboardShell
+        user={user}
+        profile={profile}
+        sidebar={<DashboardChatSidebar user={user} profile={profile} />}
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <AssistantChat />
+        </div>
+      </DashboardShell>
+    )
+  }
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
       {/* Minimal top bar -- like Claude's */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm pt-[env(safe-area-inset-top,0)]">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 px-safe md:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/icon.svg" alt="Terabits" width={32} height={32} priority className="h-8 w-8" />
+            <Image src="/server.png" alt="Terabits" width={32} height={32} priority className="h-8 w-8" />
             <span className="text-lg font-semibold text-foreground">Terabits</span>
           </Link>
 

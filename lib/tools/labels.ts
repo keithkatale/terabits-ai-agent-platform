@@ -12,4 +12,9 @@ export const TOOL_LABELS: Record<string, string> = {
   ai_extract: 'Extract Data (AI)',
   ai_summarize: 'Summarize (AI)',
   ai_image_generate: 'Generate Image',
+  slack_message: 'Slack Message',
+  discord_message: 'Discord Message',
+  browser_automation: 'Browser automation',
+  list_workflows: 'List your workflows',
+  offer_save_workflow: 'Offer to save workflow',
 }

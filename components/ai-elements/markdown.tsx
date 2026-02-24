@@ -43,12 +43,10 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Walk backwards through preceding siblings to find the nearest heading
   const extractHeading = (): string | null => {
     let el = outerRef.current?.previousElementSibling
     while (el) {
       if (/^h[1-4]$/i.test(el.tagName)) return el.textContent?.trim() ?? null
-      // Stop if we hit another table or a non-inline element that isn't a heading
       if (el.tagName === 'TABLE' || el.querySelector('table')) break
       el = el.previousElementSibling
     }
@@ -85,7 +83,6 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
     if (!data.length) return
     const heading = extractHeading()
     const payload = JSON.stringify({ heading, data })
-    // UTF-8 safe base64 encoding
     const bytes = new TextEncoder().encode(payload)
     const binary = String.fromCharCode(...bytes)
     const encoded = btoa(binary)
@@ -126,26 +123,20 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
           {shareCopied ? 'Copied!' : 'Share'}
         </button>
       </div>
-      <div ref={wrapperRef} className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full border-collapse text-sm">{children}</table>
+      <div ref={wrapperRef} className="markdown-table-wrapper overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-max w-full border-collapse text-sm table-auto">{children}</table>
       </div>
     </div>
   )
 }
 
-// ── Custom components ─────────────────────────────────────────────────────────
-
 const components: Partial<Components> = {
-  // Let <pre> be transparent — <code> handles everything
   pre: ({ children }) => <>{children}</>,
-
-  // Code: inline vs block based on className presence (block code always has language-xxx)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   code: ({ className, children, node, ...props }: any) => {
     const isInline =
       !node?.position?.start.line ||
       node?.position?.start.line === node?.position?.end.line
-
     if (isInline) {
       return (
         <code
@@ -156,7 +147,6 @@ const components: Partial<Components> = {
         </code>
       )
     }
-
     const lang = extractLanguage(className)
     return (
       <div className="my-3 overflow-hidden rounded-lg border border-border bg-muted/50">
@@ -173,8 +163,6 @@ const components: Partial<Components> = {
       </div>
     )
   },
-
-  // ── Tables (GFM) ────────────────────────────────────────────────────────────
   table: ({ children }) => <ExportableTable>{children}</ExportableTable>,
   thead: ({ children }) => (
     <thead className="border-b border-border bg-muted/60">{children}</thead>
@@ -193,8 +181,6 @@ const components: Partial<Components> = {
   td: ({ children }) => (
     <td className="px-4 py-2.5 text-sm text-foreground/90">{children}</td>
   ),
-
-  // ── Headings ────────────────────────────────────────────────────────────────
   h1: ({ children }) => (
     <h1 className="mb-3 mt-6 text-xl font-bold text-foreground first:mt-0">{children}</h1>
   ),
@@ -207,13 +193,9 @@ const components: Partial<Components> = {
   h4: ({ children }) => (
     <h4 className="mb-1.5 mt-3 text-sm font-semibold text-foreground first:mt-0">{children}</h4>
   ),
-
-  // ── Body text ───────────────────────────────────────────────────────────────
   p: ({ children }) => (
     <p className="mb-3 text-sm leading-relaxed text-foreground last:mb-0">{children}</p>
   ),
-
-  // ── Lists ───────────────────────────────────────────────────────────────────
   ul: ({ children }) => (
     <ul className="my-2 list-disc space-y-1 pl-5 text-sm text-foreground">{children}</ul>
   ),
@@ -221,8 +203,6 @@ const components: Partial<Components> = {
     <ol className="my-2 list-decimal space-y-1 pl-5 text-sm text-foreground">{children}</ol>
   ),
   li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-
-  // ── Links ───────────────────────────────────────────────────────────────────
   a: ({ href, children }) => (
     <a
       href={href}
@@ -233,18 +213,12 @@ const components: Partial<Components> = {
       {children}
     </a>
   ),
-
-  // ── Blockquote ──────────────────────────────────────────────────────────────
   blockquote: ({ children }) => (
     <blockquote className="my-3 border-l-4 border-primary/30 pl-4 italic text-muted-foreground">
       {children}
     </blockquote>
   ),
-
-  // ── Horizontal rule ─────────────────────────────────────────────────────────
   hr: () => <hr className="my-4 border-border" />,
-
-  // ── Inline text styles ───────────────────────────────────────────────────────
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
@@ -253,8 +227,6 @@ const components: Partial<Components> = {
     <del className="text-muted-foreground line-through">{children}</del>
   ),
 }
-
-// ── Memoized block ────────────────────────────────────────────────────────────
 
 const MemoizedMarkdownBlock = memo(
   function MarkdownBlock({ content }: { content: string }) {
@@ -269,11 +241,8 @@ const MemoizedMarkdownBlock = memo(
 
 MemoizedMarkdownBlock.displayName = 'MemoizedMarkdownBlock'
 
-// ── Export ────────────────────────────────────────────────────────────────────
-
 export const Markdown = memo(function Markdown({ children, className, id }: MarkdownProps) {
   const blocks = useMemo(() => parseMarkdownIntoBlocks(children), [children])
-
   return (
     <div className={cn('min-w-0', className)} data-message-id={id}>
       {blocks.map((block, i) => (

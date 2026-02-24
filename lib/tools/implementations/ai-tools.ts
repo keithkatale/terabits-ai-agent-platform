@@ -19,7 +19,7 @@ export const aiExtract = tool({
 
     try {
       const { text: result } = await generateText({
-        model: google('gemini-2.0-flash'),
+        model: google('gemini-2.5-flash-lite'),
         prompt: `Extract the following data from the text below. Return ONLY a valid JSON object with no explanation or markdown.
 
 Schema: ${schema_description}
@@ -28,7 +28,7 @@ Text:
 ${truncatedText}
 
 Return only the JSON object.`,
-        maxTokens: 1024,
+        maxOutputTokens: 1024,
       })
 
       // Try to parse the result as JSON
@@ -75,14 +75,14 @@ export const aiSummarize = tool({
 
     try {
       const { text: summary } = await generateText({
-        model: google('gemini-2.0-flash'),
+        model: google('gemini-2.5-flash-lite'),
         prompt: `Summarize the following text in approximately ${max_words} words. ${styleInstructions[style]}
 
 Text:
 ${truncatedText}
 
 Summary:`,
-        maxTokens: 1024,
+        maxOutputTokens: 1024,
       })
 
       return {

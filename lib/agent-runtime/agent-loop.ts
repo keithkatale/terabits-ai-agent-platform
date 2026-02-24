@@ -72,7 +72,7 @@ export async function runAgentLoop(
 
     // 8. Execute model with streaming
     const result = streamText({
-      model: google(config.model || 'gemini-3-flash-preview'),
+      model: google(config.model || 'gemini-2.5-flash'),
       system: config.systemPrompt,
       messages,
       tools: aiTools,

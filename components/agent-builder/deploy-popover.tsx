@@ -42,7 +42,7 @@ export function DeployPopover({ agent, onAgentUpdate }: DeployPopoverProps) {
         // Check if this is an auth error
         if (res.status === 401 && data.code === 'REQUIRES_AUTH') {
           // Redirect to signup to create account and claim this agent
-          router.push(`/auth/sign-up?next=${encodeURIComponent(`/agent/${agent.id}`)}`)
+          router.push(`/auth/sign-up?next=${encodeURIComponent(`/agent/${agent.slug ?? agent.id}`)}`)
           return
         }
         setError(data.error ?? 'Deploy failed')
@@ -69,7 +69,7 @@ export function DeployPopover({ agent, onAgentUpdate }: DeployPopoverProps) {
       if (!res.ok) {
         // Check if this is an auth error
         if (res.status === 401 && data.code === 'REQUIRES_AUTH') {
-          router.push(`/auth/sign-up?next=${encodeURIComponent(`/agent/${agent.id}`)}`)
+          router.push(`/auth/sign-up?next=${encodeURIComponent(`/agent/${agent.slug ?? agent.id}`)}`)
           return
         }
         setError(data.error ?? 'Undeploy failed')

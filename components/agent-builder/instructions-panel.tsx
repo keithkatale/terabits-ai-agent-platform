@@ -24,8 +24,8 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { Agent } from '@/lib/types'
-import { ToolCall } from '@/components/prompt-kit/tool-call'
-import { Markdown } from '@/components/prompt-kit/markdown'
+import { Tool } from '@/components/ai-elements/tool'
+import { Markdown } from '@/components/ai-elements/markdown'
 import { ToolsPanel } from './tools-panel'
 import { TOOL_LABELS as CATALOG_TOOL_LABELS } from '@/lib/tools/labels'
 
@@ -813,7 +813,7 @@ export function InstructionsPanel({ agent: initialAgent }: InstructionsPanelProp
                     }
                     if (step.type === 'tool' && step.toolData) {
                       return (
-                        <ToolCall
+                        <Tool
                           key={step.id}
                           name={step.toolData.name}
                           state={step.toolData.state}

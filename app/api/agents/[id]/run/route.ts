@@ -66,7 +66,7 @@ export async function POST(
     started_at: new Date().toISOString(),
   }).select().single()
 
-  const modelName = agent.model || 'gemini-3-flash-preview'
+  const modelName = agent.model || 'gemini-2.5-flash'
   const result = streamText({
     model: google(modelName),
     system: systemPrompt,
