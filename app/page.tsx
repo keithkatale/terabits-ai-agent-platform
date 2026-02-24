@@ -48,7 +48,7 @@ export default async function HomePage() {
       </header>
       <main className="min-h-0 flex-1 overflow-hidden pb-safe px-safe">
         <div className="flex h-full min-h-0 flex-col">
-          <AssistantChat />
+          <AssistantChat guest />
         </div>
       </main>
     </div>

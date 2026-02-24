@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, Component, type ErrorInfo, type ReactNode } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
   ChainOfThought,
@@ -36,6 +37,13 @@ import {
   PromptInputSubmit,
 } from '@/components/ai-elements/prompt-input'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import Image from 'next/image'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -429,7 +437,7 @@ function AssistantMessageContent({
   )
 }
 
-export function AssistantChat() {
+export function AssistantChat({ guest = false }: { guest?: boolean }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [steps, setSteps] = useState<AssistantStep[]>([])
@@ -441,6 +449,7 @@ export function AssistantChat() {
   const [workflowOffer, setWorkflowOffer] = useState<WorkflowOffer | null>(null)
   const [workflowSaving, setWorkflowSaving] = useState(false)
   const [activePresetTab, setActivePresetTab] = useState(0)
+  const [signInModalOpen, setSignInModalOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const initialQuerySent = useRef(false)
@@ -452,18 +461,20 @@ export function AssistantChat() {
   const [recentSessions, setRecentSessions] = useState<{ sessionId: string; preview: string; updatedAt: string }[]>([])
   const conversationScrollRef = useRef<HTMLDivElement>(null)
 
-  // Load recent conversations list (for opening as chat)
+  // Load recent conversations list (for opening as chat) — skip when guest
   useEffect(() => {
+    if (guest) return
     fetch('/api/chat/sessions')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.sessions?.length) setRecentSessions(d.sessions)
       })
       .catch(() => {})
-  }, [messages.length])
+  }, [guest, messages.length])
 
-  // Load persisted conversation when session is in URL (only when chat is empty so we don't overwrite)
+  // Load persisted conversation when session is in URL — skip when guest
   useEffect(() => {
+    if (guest) return
     const sid = searchParams.get('session')?.trim()
     if (!sid || isStreaming || messages.length > 0) return
     sessionIdRef.current = sid
@@ -489,7 +500,7 @@ export function AssistantChat() {
         )
       })
       .catch(() => {})
-  }, [searchParams, isStreaming, messages.length])
+  }, [guest, searchParams, isStreaming, messages.length])
 
   // Scroll to end when a new message is added
   const prevMessagesLen = useRef(messages.length)
@@ -538,13 +549,14 @@ export function AssistantChat() {
   }, [searchParams, messages.length, isStreaming])
 
   useEffect(() => {
+    if (guest) return
     fetch('/api/user/credits')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d) setCreditBalance(d.balance?.balance ?? 0)
       })
       .catch(() => {})
-  }, [])
+  }, [guest])
 
   const handleSubmit = async (textOverride?: string) => {
     const text = (textOverride ?? inputValue).trim()
@@ -611,8 +623,8 @@ export function AssistantChat() {
             }
 
             if (data.type === 'start') {
-              if (data.sessionId) {
-                sessionIdRef.current = data.sessionId
+              if (data.sessionId) sessionIdRef.current = data.sessionId
+              if (!guest && data.sessionId) {
                 const u = new URL(window.location.href)
                 u.searchParams.set('session', data.sessionId)
                 window.history.replaceState({}, '', u.pathname + u.search)
@@ -799,6 +811,19 @@ export function AssistantChat() {
               <p className="mt-2 text-sm text-muted-foreground">
                 I can search the web, send emails, look things up, and run workflows. Describe a task or pick one below.
               </p>
+              {guest && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  You’re in trial mode. Conversations aren’t saved.{' '}
+                  <button
+                    type="button"
+                    onClick={() => setSignInModalOpen(true)}
+                    className="font-medium text-primary underline underline-offset-2 hover:no-underline"
+                  >
+                    Sign in
+                  </button>
+                  {' '}to save conversations and unlock full capabilities.
+                </p>
+              )}
               <div className="mt-8 w-full max-w-2xl">
                 <PromptInput
                   onSubmit={(message) => {
@@ -819,7 +844,14 @@ export function AssistantChat() {
                   <PromptInputFooter>
                     <PromptInputTools>
                       <span className="text-[11px] text-muted-foreground/40">
-                        {creditBalance != null && creditsUsed != null ? `${creditsUsed} used · ${creditBalance} left` : creditBalance != null ? `${creditBalance} credits` : 'Assistant'}
+                        {guest ? (
+                          <>
+                            Trial ·{' '}
+                            <button type="button" onClick={() => setSignInModalOpen(true)} className="text-primary underline underline-offset-1 hover:no-underline">
+                              Sign in to save
+                            </button>
+                          </>
+                        ) : creditBalance != null && creditsUsed != null ? `${creditsUsed} used · ${creditBalance} left` : creditBalance != null ? `${creditBalance} credits` : 'Assistant'}
                       </span>
                     </PromptInputTools>
                     <PromptInputSubmit
@@ -1032,7 +1064,14 @@ export function AssistantChat() {
           <PromptInputFooter>
             <PromptInputTools>
               <span className="text-[11px] text-muted-foreground/40">
-                {creditBalance != null && creditsUsed != null ? `${creditsUsed} used · ${creditBalance} left` : creditBalance != null ? `${creditBalance} credits` : 'Assistant'}
+                {guest ? (
+                  <>
+                    Trial ·{' '}
+                    <button type="button" onClick={() => setSignInModalOpen(true)} className="text-primary underline underline-offset-1 hover:no-underline">
+                      Sign in to save
+                    </button>
+                  </>
+                ) : creditBalance != null && creditsUsed != null ? `${creditsUsed} used · ${creditBalance} left` : creditBalance != null ? `${creditBalance} credits` : 'Assistant'}
               </span>
             </PromptInputTools>
             <PromptInputSubmit
@@ -1042,6 +1081,25 @@ export function AssistantChat() {
           </PromptInputFooter>
         </PromptInput>
       </div>
+
+      <Dialog open={signInModalOpen} onOpenChange={setSignInModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sign in for full capabilities</DialogTitle>
+            <DialogDescription>
+              Create an account to save conversations, use more tools (Gmail, Slack, workflows), and unlock full capabilities.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button asChild>
+              <Link href="/auth/login">Sign in</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/auth/sign-up">Create account</Link>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
     </ChatErrorBoundary>
   )

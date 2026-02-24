@@ -75,22 +75,30 @@ When using \`browser_automation\`, you must work in a strict **observe–act–o
 - Do not loop or repeat the same action. If something fails, say so and stop or try one alternative.
 - If the user is not signed in and a tool needs them (e.g. Gmail), say they should sign in and connect Gmail in account settings.`
 
+// Guest (unauthenticated) users: can chat but nothing is saved; AI is limited and prompts sign-up.
+const GUEST_SYSTEM_PROMPT = `You are a trial AI assistant. The user is not signed in.
+
+## Behaviour
+- **Help with the request.** Use your tools (web search, web scrape, etc.) to do what they ask. Keep responses focused and useful.
+- **Trial limitations.** You do NOT have access to: saving workflows, listing the user's workflows, Gmail/Slack/Discord (they require a connected account). If a tool fails due to auth, say briefly that the feature requires an account.
+- **Always end with a sign-up prompt.** After your final answer, add exactly one short line on its own, for example:
+  "Create a free account to save conversations, use more tools, and unlock full capabilities."
+  Or: "Sign up to save this conversation and get access to email, workflows, and more."
+- **Be helpful but concise.** Do the task, give the result, then the one-line prompt to create an account. Do not repeat the sign-up message multiple times in one reply.`
+
 export async function POST(req: Request) {
   const supabase = await createClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  const isGuest = authError !== null || !user
 
-  const creditBalance = await creditsService.getBalance(user.id)
-  if (!creditBalance || creditBalance.balance < 1) {
-    return new Response(
-      JSON.stringify({ error: 'Insufficient credits', code: 'NO_CREDITS' }),
-      { status: 402, headers: { 'Content-Type': 'application/json' } },
-    )
+  if (!isGuest) {
+    const creditBalance = await creditsService.getBalance(user!.id)
+    if (!creditBalance || creditBalance.balance < 1) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits', code: 'NO_CREDITS' }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
   }
 
   let body: { messages?: unknown[] }
@@ -122,124 +130,138 @@ export async function POST(req: Request) {
   }
 
   const catalogTools = getEnabledTools(getAssistantToolConfig())
-  const assistantAgentId = await getOrCreatePersonalAssistantAgent(supabase, user.id)
-  const { data: assistantAgent } = await supabase
-    .from('agents')
-    .select('name, instruction_prompt')
-    .eq('id', assistantAgentId)
-    .single()
-  const systemPrompt = buildExecutionSystemPrompt(
-    assistantAgent?.name ?? 'Assistant',
-    ASSISTANT_SYSTEM_PROMPT
-  )
-  const assistantOnlyTools = {
-    list_workflows: tool({
-      description:
-        'List the user\'s saved workflows. Use this to check if they already have a workflow that does a similar task (e.g. lead generation, research) before doing the task or offering to save a new workflow.',
-      inputSchema: z.object({}).optional(),
-      execute: async () => {
-        const { data: rows } = await supabase
-          .from('workflows')
-          .select('id, slug, name, description')
-          .eq('user_id', user.id)
-          .order('updated_at', { ascending: false })
-          .limit(50)
-        return { workflows: rows ?? [], count: (rows ?? []).length }
-      },
-    }),
-    offer_save_workflow: tool({
-      description:
-        'Offer to save the task you just completed as a repeatable workflow. Call this ONLY after you have already performed the task and delivered a result. The user will see a "Save this workflow?" prompt; if they accept, a new workflow is created with a form they can use next time (e.g. region, number of leads).',
-      inputSchema: z.object({
-        suggestedName: z.string().describe('Short name for the workflow, e.g. "US Plumber Lead Gen"'),
-        description: z.string().describe('One sentence: what this workflow does'),
-        instructionPrompt: z
-          .string()
-          .describe(
-            'Full system prompt for the saved agent: role, how to use the form inputs, what to do (search, scrape, compile), output format. 2-4 paragraphs.',
-          ),
-        inputFields: z
-          .array(
-            z.object({
-              name: z.string().describe('Field key, e.g. "region" or "numberOfLeads"'),
-              label: z.string().describe('Human-readable label, e.g. "Region or country"'),
-              type: z.enum(['text', 'number', 'url', 'textarea']),
-              placeholder: z.string().optional(),
-              required: z.boolean().optional(),
-            }),
-          )
-          .describe('Form fields the user will fill when running the workflow (e.g. region, number of leads)'),
-      }),
-      execute: async ({ suggestedName, description, instructionPrompt, inputFields }) => {
-        return {
-          __workflowOffer: true,
-          suggestedName,
-          description,
-          instructionPrompt,
-          inputFields: inputFields ?? [],
-        }
-      },
-    }),
-  }
-  const tools = { ...catalogTools, ...assistantOnlyTools }
   const requestSignal = (req as Request & { signal?: AbortSignal }).signal
+
+  let systemPrompt: string
+  let tools: Record<string, ReturnType<typeof tool>>
+  let assistantAgentId: string | null = null
+  let creditBalance: { balance: number } | null = null
+
+  if (isGuest) {
+    systemPrompt = GUEST_SYSTEM_PROMPT
+    tools = catalogTools
+  } else {
+    creditBalance = await creditsService.getBalance(user!.id)
+    assistantAgentId = await getOrCreatePersonalAssistantAgent(supabase, user!.id)
+    const { data: assistantAgent } = await supabase
+      .from('agents')
+      .select('name, instruction_prompt')
+      .eq('id', assistantAgentId)
+      .single()
+    systemPrompt = buildExecutionSystemPrompt(
+      assistantAgent?.name ?? 'Assistant',
+      ASSISTANT_SYSTEM_PROMPT
+    )
+    const assistantOnlyTools = {
+      list_workflows: tool({
+        description:
+          'List the user\'s saved workflows. Use this to check if they already have a workflow that does a similar task (e.g. lead generation, research) before doing the task or offering to save a new workflow.',
+        inputSchema: z.object({}).optional(),
+        execute: async () => {
+          const { data: rows } = await supabase
+            .from('workflows')
+            .select('id, slug, name, description')
+            .eq('user_id', user!.id)
+            .order('updated_at', { ascending: false })
+            .limit(50)
+          return { workflows: rows ?? [], count: (rows ?? []).length }
+        },
+      }),
+      offer_save_workflow: tool({
+        description:
+          'Offer to save the task you just completed as a repeatable workflow. Call this ONLY after you have already performed the task and delivered a result. The user will see a "Save this workflow?" prompt; if they accept, a new workflow is created with a form they can use next time (e.g. region, number of leads).',
+        inputSchema: z.object({
+          suggestedName: z.string().describe('Short name for the workflow, e.g. "US Plumber Lead Gen"'),
+          description: z.string().describe('One sentence: what this workflow does'),
+          instructionPrompt: z
+            .string()
+            .describe(
+              'Full system prompt for the saved agent: role, how to use the form inputs, what to do (search, scrape, compile), output format. 2-4 paragraphs.',
+            ),
+          inputFields: z
+            .array(
+              z.object({
+                name: z.string().describe('Field key, e.g. "region" or "numberOfLeads"'),
+                label: z.string().describe('Human-readable label, e.g. "Region or country"'),
+                type: z.enum(['text', 'number', 'url', 'textarea']),
+                placeholder: z.string().optional(),
+                required: z.boolean().optional(),
+              }),
+            )
+            .describe('Form fields the user will fill when running the workflow (e.g. region, number of leads)'),
+        }),
+        execute: async ({ suggestedName, description, instructionPrompt, inputFields }) => {
+          return {
+            __workflowOffer: true,
+            suggestedName,
+            description,
+            instructionPrompt,
+            inputFields: inputFields ?? [],
+          }
+        },
+      }),
+    }
+    tools = { ...catalogTools, ...assistantOnlyTools }
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: object) => controller.enqueue(sse(data))
 
-      let sessionId = typeof bodySessionId === 'string' && bodySessionId ? bodySessionId : crypto.randomUUID()
+      const sessionId = typeof bodySessionId === 'string' && bodySessionId ? bodySessionId : crypto.randomUUID()
       const agentId = assistantAgentId
       let runLogId: string | null = null
 
-      await runWithExecutionContext({ userId: user.id }, async () => {
-        const lastMsg = messages[messages.length - 1] as { role?: string; content?: string } | undefined
-        const lastContent = typeof lastMsg?.content === 'string' ? lastMsg.content : ''
-        const isFirstMessageInSession = messages.length === 1
-        if (lastMsg?.role === 'user' && lastContent.trim()) {
-          const { data: insertedMessage } = await supabase
-            .from('messages')
+      if (!isGuest && user && agentId) {
+        await runWithExecutionContext({ userId: user.id }, async () => {
+          const lastMsg = messages[messages.length - 1] as { role?: string; content?: string } | undefined
+          const lastContent = typeof lastMsg?.content === 'string' ? lastMsg.content : ''
+          const isFirstMessageInSession = messages.length === 1
+          if (lastMsg?.role === 'user' && lastContent.trim()) {
+            const { data: insertedMessage } = await supabase
+              .from('messages')
+              .insert({
+                agent_id: agentId,
+                session_id: sessionId,
+                role: 'user',
+                content: lastContent.trim(),
+                message_type: 'text',
+                metadata: {},
+              })
+              .select('id')
+              .single()
+
+            if (isFirstMessageInSession && insertedMessage?.id) {
+              const messageId = insertedMessage.id
+              generateChatTitle(lastContent.trim())
+                .then(async (title) => {
+                  const client = await createClient()
+                  await client.from('messages').update({ metadata: { sessionTitle: title } }).eq('id', messageId)
+                })
+                .catch(() => {})
+            }
+          }
+
+          const runStartedAt = new Date().toISOString()
+          const { data: runLog } = await supabase
+            .from('execution_logs')
             .insert({
               agent_id: agentId,
               session_id: sessionId,
-              role: 'user',
-              content: lastContent.trim(),
-              message_type: 'text',
-              metadata: {},
+              lane: 'assistant',
+              status: 'running',
+              input: { message_count: messages.length, last_message_preview: lastContent.slice(0, 200) },
+              started_at: runStartedAt,
             })
             .select('id')
             .single()
-
-          if (isFirstMessageInSession && insertedMessage?.id) {
-            const messageId = insertedMessage.id
-            generateChatTitle(lastContent.trim())
-              .then(async (title) => {
-                const client = await createClient()
-                await client.from('messages').update({ metadata: { sessionTitle: title } }).eq('id', messageId)
-              })
-              .catch(() => {})
-          }
-        }
-
-        const runStartedAt = new Date().toISOString()
-        const { data: runLog } = await supabase
-          .from('execution_logs')
-          .insert({
-            agent_id: agentId,
-            session_id: sessionId,
-            lane: 'assistant',
-            status: 'running',
-            input: { message_count: messages.length, last_message_preview: lastContent.slice(0, 200) },
-            started_at: runStartedAt,
-          })
-          .select('id')
-          .single()
-        runLogId = runLog?.id ?? null
-      })
+          runLogId = runLog?.id ?? null
+        })
+      }
 
       send({ type: 'start', agentName: 'Assistant', sessionId, runId: runLogId, timestamp: Date.now() })
 
-      await runWithExecutionContext({ userId: user.id }, async () => {
+      const runStream = async () => {
         try {
           const result = streamText({
             model: google('gemini-3-flash-preview'),
@@ -407,8 +429,8 @@ export async function POST(req: Request) {
           }
 
           let creditsUsed = 0
-          let balanceAfter = creditBalance.balance
-          if (usage.promptTokens > 0 || usage.completionTokens > 0) {
+          let balanceAfter = creditBalance?.balance ?? 0
+          if (!isGuest && user && creditBalance && (usage.promptTokens > 0 || usage.completionTokens > 0)) {
             try {
               const costCalc = await tokenConverter.calculateCredits('gemini-3-flash-preview', {
                 promptTokens: usage.promptTokens,
@@ -468,7 +490,7 @@ export async function POST(req: Request) {
               })
               .eq('id', runLogId)
           }
-          if (agentId && (finalText.trim() || (runLogId && storedSteps.length > 0))) {
+          if (!isGuest && agentId && (finalText.trim() || (runLogId && storedSteps.length > 0))) {
             await supabase.from('messages').insert({
               agent_id: agentId,
               session_id: sessionId,
@@ -496,7 +518,8 @@ export async function POST(req: Request) {
         } finally {
           controller.close()
         }
-      })
+      }
+      await runStream()
     },
   })
 
