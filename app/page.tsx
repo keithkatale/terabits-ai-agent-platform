@@ -1,13 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
-import { HeroSection } from '@/components/landing/hero-section'
-import { FeaturesSection } from '@/components/landing/features-section'
-import { HowItWorksSection } from '@/components/landing/how-it-works-section'
-import { PricingSection } from '@/components/landing/pricing-section'
-import { UseCases } from '@/components/landing/use-cases'
-import { IntegrationsMarquee } from '@/components/landing/integrations-marquee'
-import { Footer } from '@/components/landing/footer'
 import { AuthNavbar } from '@/components/landing/auth-navbar'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
@@ -38,42 +31,26 @@ export default async function HomePage() {
     )
   }
 
+  // Unauthenticated: same chat UI as /chat, with Sign in / Sign up in the top bar
   return (
-    <div className="flex min-h-svh flex-col bg-background">
-      {/* Minimal top bar -- like Claude's */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm pt-[env(safe-area-inset-top,0)]">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 px-safe md:px-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/server.png" alt="Terabits" width={32} height={32} priority className="h-8 w-8" />
-            <span className="text-lg font-semibold text-foreground">Terabits</span>
+    <div className="flex h-svh flex-col bg-background">
+      <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-background backdrop-blur-sm pt-safe">
+        <div className="flex h-12 w-full items-center justify-between gap-3 px-4 md:h-10 md:px-6">
+          <Link href="/" className="flex min-w-0 items-center gap-2.5">
+            <Image src="/server.png" alt="Terabits" width={32} height={32} priority className="h-8 w-8 shrink-0" />
+            <span className="text-lg font-semibold text-foreground truncate">Terabits</span>
           </Link>
-
-          <nav className="hidden items-center gap-6 md:flex">
-            <a href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-              How it Works
-            </a>
-            <a href="#use-cases" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-              Use Cases
-            </a>
-          </nav>
-
           <div className="flex items-center gap-2">
             <ThemeToggle variant="ghost" size="icon-sm" />
             <AuthNavbar />
           </div>
         </div>
       </header>
-
-      <main className="flex-1">
-        <HeroSection />
-        <FeaturesSection />
-        <HowItWorksSection />
-        <UseCases />
-        <IntegrationsMarquee />
-        <PricingSection />
+      <main className="min-h-0 flex-1 overflow-hidden pb-safe px-safe">
+        <div className="flex h-full min-h-0 flex-col">
+          <AssistantChat />
+        </div>
       </main>
-
-      <Footer />
     </div>
   )
 }
