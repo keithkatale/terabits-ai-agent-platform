@@ -39,7 +39,7 @@ You only need to create OAuth credentials in Google Cloud and add two env vars.
 4. Under **Scopes**, click **Add or remove scopes** and add:
    - `https://www.googleapis.com/auth/gmail.send`
    (This allows “Send email on your behalf” only.)
-5. Save. If External, you may see “Publishing status: Testing”. For testing, add your own email (and any test users) under **Test users**. For production, submit for verification later.
+5. Save. If External, you may see “Publishing status: Testing”. For testing, add your own email (and any test users) under **Test users**. For production (so any user can connect Gmail without “unverified app” warnings), you must add **Terms of Service** and **Privacy Policy** URLs and submit for verification — see [GOOGLE_OAUTH_VERIFICATION.md](./GOOGLE_OAUTH_VERIFICATION.md). This app exposes those at `/terms` and `/privacy`.
 
 ---
 

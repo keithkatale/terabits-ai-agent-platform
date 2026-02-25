@@ -2,12 +2,13 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Workflow, Plus } from 'lucide-react'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 
 export default async function WorkflowsListPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/auth/login')
 
+  const supabase = await createClient()
   const { data: workflows } = await supabase
     .from('workflows')
     .select('id, slug, name, description, updated_at')

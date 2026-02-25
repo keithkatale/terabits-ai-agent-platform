@@ -5,6 +5,7 @@ import { streamText, stepCountIs, convertToModelMessages, tool } from 'ai'
 import { z } from 'zod'
 import { google } from '@ai-sdk/google'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { getEnabledTools, getAssistantToolConfig } from '@/lib/tools/catalog'
 import { runWithExecutionContext } from '@/lib/execution-context'
 import creditsService from '@/lib/payments/credits-service'
@@ -95,12 +96,12 @@ const GUEST_SYSTEM_PROMPT = `You are a trial AI assistant. The user is not signe
 - **Be helpful but concise.** Do the task, give the result, then the one-line prompt to create an account. Do not repeat the sign-up message multiple times in one reply.`
 
 export async function POST(req: Request) {
+  const user = await getCurrentUser()
   const supabase = await createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  const isGuest = authError !== null || !user
+  const isGuest = !user
 
-  if (!isGuest) {
-    const creditBalance = await creditsService.getBalance(user!.id)
+  if (!isGuest && user) {
+    const creditBalance = await creditsService.getBalance(user.id)
     if (!creditBalance || creditBalance.balance < 1) {
       return new Response(
         JSON.stringify({ error: 'Insufficient credits', code: 'NO_CREDITS' }),

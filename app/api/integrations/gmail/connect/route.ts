@@ -5,15 +5,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { GMAIL_SEND_SCOPE } from '@/lib/integrations/gmail'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) {
+  const user = await getCurrentUser()
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

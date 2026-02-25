@@ -3,6 +3,7 @@ import { DM_Sans, Crimson_Pro, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
+import { SessionProvider } from '@/components/auth/session-provider'
 import { NavigationProgress } from '@/components/navigation-progress'
 import './globals.css'
 
@@ -52,10 +53,12 @@ export default function RootLayout({
           enableSystem={false}
           storageKey="terabits-theme"
         >
-          <NavigationProgress />
-          {children}
-          <Toaster />
-          <Analytics />
+          <SessionProvider>
+            <NavigationProgress />
+            {children}
+            <Toaster />
+            <Analytics />
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>

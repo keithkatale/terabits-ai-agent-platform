@@ -1,12 +1,11 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { ConnectedAccounts } from '@/components/dashboard/connected-accounts'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 
 export const metadata = { title: 'Settings — Terabits' }
 
 export default async function SettingsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/auth/login')
 
   return (

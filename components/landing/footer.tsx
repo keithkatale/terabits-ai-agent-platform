@@ -16,7 +16,13 @@ export function Footer() {
             />
             <span className="font-semibold text-foreground">Terabits</span>
           </div>
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-6 md:gap-8">
+            <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Terms of Service
+            </Link>
+            <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Privacy Policy
+            </Link>
             <Link href="/auth/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Sign in
             </Link>

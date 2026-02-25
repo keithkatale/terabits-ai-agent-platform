@@ -1,10 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { auth } from '@/auth'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
+
+  // Allow dashboard if signed in with Google (Auth.js)
+  const session = await auth()
+  if (session?.user && (session.user as { supabase_user_id?: string }).supabase_user_id) {
+    return supabaseResponse
+  }
 
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.

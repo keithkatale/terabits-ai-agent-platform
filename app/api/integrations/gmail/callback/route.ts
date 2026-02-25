@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { GMAIL_SEND_SCOPE } from '@/lib/integrations/gmail'
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -33,9 +34,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${accountUrl}?gmail=error&error=invalid_state`)
   }
 
+  const user = await getCurrentUser()
   const supabase = await createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
+  if (!user) {
     return NextResponse.redirect(`${accountUrl}?gmail=error&error=session_expired`)
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 import creditsService from '@/lib/payments/credits-service'
 
 /**
@@ -7,15 +7,8 @@ import creditsService from '@/lib/payments/credits-service'
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
