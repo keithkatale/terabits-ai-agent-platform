@@ -767,7 +767,9 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
             if (data.type === 'start') {
               if (data.sessionId) sessionIdRef.current = data.sessionId
               if (!guest && data.sessionId) {
-                router.replace(`/chat/${data.sessionId}`)
+                // Use replaceState so the URL updates without unmounting/remounting
+                // the component (router.replace causes a full re-render that kills the stream)
+                window.history.replaceState(null, '', `/chat/${data.sessionId}`)
               }
               if (data.runId) currentRunIdRef.current = data.runId
             } else if (data.type === 'reasoning') {

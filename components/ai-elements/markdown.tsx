@@ -93,7 +93,7 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div ref={outerRef} className="group relative my-4">
+    <div ref={outerRef} className="group relative my-5">
       <div
         data-no-print
         className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
@@ -130,6 +130,8 @@ function ExportableTable({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ── Markdown component map ─────────────────────────────────────────────────────
+
 const components: Partial<Components> = {
   pre: ({ children }) => <>{children}</>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -140,7 +142,7 @@ const components: Partial<Components> = {
     if (isInline) {
       return (
         <code
-          className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground"
+          className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.82em] text-foreground ring-1 ring-border/60"
           {...props}
         >
           {children}
@@ -149,14 +151,14 @@ const components: Partial<Components> = {
     }
     const lang = extractLanguage(className)
     return (
-      <div className="my-3 overflow-hidden rounded-lg border border-border bg-muted/50">
+      <div className="my-4 overflow-hidden rounded-xl border border-border bg-muted/40">
         {lang && (
-          <div className="border-b border-border bg-muted/80 px-3 py-1.5">
-            <span className="font-mono text-[10px] text-muted-foreground">{lang}</span>
+          <div className="border-b border-border bg-muted/70 px-4 py-2">
+            <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{lang}</span>
           </div>
         )}
         <pre className="overflow-x-auto p-4">
-          <code className="font-mono text-[12px] leading-relaxed text-foreground/90">
+          <code className="font-mono text-[13px] leading-relaxed text-foreground/90">
             {children}
           </code>
         </pre>
@@ -179,62 +181,78 @@ const components: Partial<Components> = {
     </th>
   ),
   td: ({ children }) => (
-    <td className="px-4 py-2.5 text-sm text-foreground/90">{children}</td>
+    <td className="px-4 py-2.5 text-[14px] text-foreground/90">{children}</td>
   ),
+
+  // ── Headings — each tier clearly distinguishable ───────────────────────────
   h1: ({ children }) => (
-    <h1 className="mb-4 mt-8 text-[1.75rem] font-extrabold leading-tight tracking-tight text-foreground first:mt-0 border-b-2 border-border pb-2">
+    <h1 className="mt-8 mb-4 first:mt-1 text-[1.65rem] font-extrabold leading-tight tracking-tight text-foreground border-b-2 border-primary/30 pb-2">
       {children}
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mb-3 mt-7 text-[1.35rem] font-bold leading-snug tracking-tight text-foreground first:mt-0 border-b border-border/60 pb-1.5">
+    <h2 className="mt-7 mb-3 first:mt-1 text-[1.3rem] font-bold leading-snug tracking-tight text-foreground border-b border-border pb-1">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mb-2.5 mt-6 text-[1.15rem] font-bold leading-snug text-foreground first:mt-0">
+    <h3 className="mt-6 mb-2.5 first:mt-1 text-[1.1rem] font-bold leading-snug text-foreground">
       {children}
     </h3>
   ),
   h4: ({ children }) => (
-    <h4 className="mb-2 mt-5 text-[1rem] font-semibold uppercase tracking-wide text-foreground/80 first:mt-0">
+    <h4 className="mt-5 mb-2 first:mt-1 text-[0.95rem] font-semibold uppercase tracking-widest text-foreground/70">
       {children}
     </h4>
   ),
+
+  // ── Body ──────────────────────────────────────────────────────────────────
   p: ({ children }) => (
-    <p className="mb-3.5 text-[0.9625rem] font-[450] leading-[1.8] text-foreground last:mb-0">{children}</p>
+    <p className="mb-4 last:mb-0 text-[15px] font-normal leading-[1.85] text-foreground/95">
+      {children}
+    </p>
   ),
   ul: ({ children }) => (
-    <ul className="my-3.5 list-disc space-y-2 pl-6 text-[0.9625rem] font-[450] leading-[1.8] text-foreground">{children}</ul>
+    <ul className="my-4 space-y-1.5 pl-6 text-[15px] font-normal leading-[1.85] text-foreground/95 list-disc marker:text-foreground/40">
+      {children}
+    </ul>
   ),
   ol: ({ children }) => (
-    <ol className="my-3.5 list-decimal space-y-2 pl-6 text-[0.9625rem] font-[450] leading-[1.8] text-foreground">{children}</ol>
+    <ol className="my-4 space-y-1.5 pl-6 text-[15px] font-normal leading-[1.85] text-foreground/95 list-decimal marker:text-foreground/50 marker:font-semibold">
+      {children}
+    </ol>
   ),
-  li: ({ children }) => <li className="leading-[1.8]">{children}</li>,
+  li: ({ children }) => (
+    <li className="leading-[1.85] pl-1">{children}</li>
+  ),
   a: ({ href, children }) => (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+      className="font-medium text-primary underline decoration-primary/40 underline-offset-2 transition-colors hover:text-primary/80 hover:decoration-primary"
     >
       {children}
     </a>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="my-4 rounded-r-md border-l-4 border-primary/60 bg-primary/5 py-2.5 pl-4 pr-3 text-[0.9625rem] font-[450] italic leading-relaxed text-foreground/80">
+    <blockquote className="my-5 border-l-4 border-primary/60 bg-primary/5 pl-4 pr-3 py-3 rounded-r-lg text-[15px] italic leading-relaxed text-foreground/80">
       {children}
     </blockquote>
   ),
-  hr: () => <hr className="my-6 border-border/60" />,
+  hr: () => <hr className="my-6 border-border/50" />,
   strong: ({ children }) => (
     <strong className="font-bold text-foreground">{children}</strong>
   ),
-  em: ({ children }) => <em className="italic text-foreground/80">{children}</em>,
+  em: ({ children }) => (
+    <em className="italic text-foreground/80">{children}</em>
+  ),
   del: ({ children }) => (
     <del className="text-muted-foreground line-through">{children}</del>
   ),
 }
+
+// ── Memoized block renderer ───────────────────────────────────────────────────
 
 const MemoizedMarkdownBlock = memo(
   function MarkdownBlock({ content }: { content: string }) {

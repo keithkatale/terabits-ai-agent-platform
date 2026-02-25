@@ -134,6 +134,7 @@ export function DashboardChatSidebar({
       <div className={cn('shrink-0', collapsed ? 'w-full flex justify-center px-0' : 'px-3')}>
         <Link
           href="/chat/new"
+          onClick={() => tabContext?.setCurrentTab('dashboard')}
           className={cn(
             'flex rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
             collapsed ? 'h-10 w-10 items-center justify-center' : 'items-center gap-2'
@@ -150,6 +151,7 @@ export function DashboardChatSidebar({
       <div className={cn('shrink-0', collapsed ? 'w-full flex justify-center px-0' : 'px-3')}>
         <Link
           href="/chat"
+          onClick={() => tabContext?.setCurrentTab('dashboard')}
           className={cn(
             'flex rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
             collapsed ? 'h-10 w-10 items-center justify-center' : 'items-center gap-2'
@@ -187,6 +189,7 @@ export function DashboardChatSidebar({
                   >
                     <Link
                       href={`/chat/${encodeURIComponent(s.sessionId)}`}
+                      onClick={() => tabContext?.setCurrentTab('dashboard')}
                       className={cn(
                         'min-w-0 flex-1 rounded-r-md py-2 pl-3 pr-1 text-sm text-foreground transition-colors hover:bg-secondary/50',
                         currentSession === s.sessionId && 'bg-secondary'
@@ -241,6 +244,7 @@ export function DashboardChatSidebar({
                     <li key={w.id}>
                       <Link
                         href={workflowPath}
+                        onClick={() => tabContext?.setCurrentTab('dashboard')}
                         className={cn(
                           'flex items-center gap-2 rounded-r-lg border-l-2 py-2 pl-3 pr-2 text-sm text-foreground transition-colors hover:bg-secondary/50',
                           pathname === workflowPath ? 'border-primary bg-secondary' : 'border-transparent'

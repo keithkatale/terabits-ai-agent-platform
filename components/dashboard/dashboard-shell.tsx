@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { Logo } from '@/components/ui/logo'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { CreditsCounter } from './credits-counter'
@@ -182,6 +183,12 @@ function DashboardShellInner({ user, profile, children, sidebar, currentPage, se
 export function DashboardShell({ user, profile, children, sidebar }: DashboardShellProps) {
   const [currentPage, setCurrentPage] = useState<DashboardTab>('dashboard')
   const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false)
+  const pathname = usePathname()
+
+  // Reset to dashboard view whenever the user navigates to a different route
+  useEffect(() => {
+    setCurrentPage('dashboard')
+  }, [pathname])
 
   const initials = profile?.full_name
     ? profile.full_name
