@@ -46,7 +46,7 @@ const PLATFORMS: Platform[] = [
     label: 'LinkedIn',
     description: 'Send connection requests, messages, post content, scrape profiles for outreach.',
     loginUrl: 'https://www.linkedin.com/login',
-    iconEmoji: '💼',
+    icon: '/icons/linkedIn.png',
     color: 'bg-blue-600',
   },
   {
@@ -54,7 +54,7 @@ const PLATFORMS: Platform[] = [
     label: 'X (Twitter)',
     description: 'Post tweets, reply to threads, send DMs, monitor mentions.',
     loginUrl: 'https://x.com/login',
-    iconEmoji: '𝕏',
+    icon: '/icons/x.png',
     color: 'bg-black',
   },
   {
@@ -62,7 +62,7 @@ const PLATFORMS: Platform[] = [
     label: 'Instagram',
     description: 'Post images, reels, manage comments and DMs.',
     loginUrl: 'https://www.instagram.com/accounts/login/',
-    iconEmoji: '📸',
+    icon: '/icons/instagram.png',
     color: 'bg-gradient-to-br from-purple-600 to-pink-500',
   },
   {
@@ -78,7 +78,7 @@ const PLATFORMS: Platform[] = [
     label: 'Reddit',
     description: 'Post to subreddits, comment, monitor brand mentions.',
     loginUrl: 'https://www.reddit.com/login/',
-    iconEmoji: '🤖',
+    icon: '/icons/reddit.png',
     color: 'bg-orange-600',
   },
   {

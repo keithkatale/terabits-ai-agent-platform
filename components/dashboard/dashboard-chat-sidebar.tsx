@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useSidebarCollapse } from '@/components/dashboard/sidebar-collapse-context'
+import { useDashboardTab } from '@/components/dashboard/dashboard-tab-context'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
 
@@ -50,6 +51,7 @@ export function DashboardChatSidebar({
 
   const sidebarCollapse = useSidebarCollapse()
   const collapsed = sidebarCollapse?.collapsed ?? false
+  const tabContext = useDashboardTab()
 
   useEffect(() => {
     fetch('/api/chat/sessions')
@@ -260,32 +262,65 @@ export function DashboardChatSidebar({
       {/* Spacer when collapsed so profile stays at bottom */}
       {collapsed && <div className="min-h-0 flex-1" />}
 
-      {/* Settings + Connected Accounts links */}
+      {/* Settings + Connected Accounts — in-app tabs (like account) */}
       <div className={cn('shrink-0 px-3 pb-1 space-y-0.5', collapsed && 'flex flex-col items-center px-0')}>
-        <Link
-          href="/settings"
-          className={cn(
-            'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
-            pathname === '/settings' ? 'bg-secondary text-foreground' : 'text-muted-foreground',
-            collapsed && 'h-10 w-10 justify-center px-0'
-          )}
-          title="Settings"
-        >
-          <Settings className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>Settings</span>}
-        </Link>
-        <Link
-          href="/settings#connected"
-          className={cn(
-            'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
-            'text-muted-foreground',
-            collapsed && 'h-10 w-10 justify-center px-0'
-          )}
-          title="Connected Accounts"
-        >
-          <Plug className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>Connected Accounts</span>}
-        </Link>
+        {tabContext ? (
+          <>
+            <button
+              type="button"
+              onClick={() => tabContext.setCurrentTab('settings')}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
+                tabContext.currentTab === 'settings' ? 'bg-secondary text-foreground' : 'text-muted-foreground',
+                collapsed && 'h-10 w-10 justify-center px-0'
+              )}
+              title="Settings"
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Settings</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => tabContext.setCurrentTab('connections')}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
+                tabContext.currentTab === 'connections' ? 'bg-secondary text-foreground' : 'text-muted-foreground',
+                collapsed && 'h-10 w-10 justify-center px-0'
+              )}
+              title="Connected Accounts"
+            >
+              <Plug className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Connected Accounts</span>}
+            </button>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/settings"
+              className={cn(
+                'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
+                pathname === '/settings' ? 'bg-secondary text-foreground' : 'text-muted-foreground',
+                collapsed && 'h-10 w-10 justify-center px-0'
+              )}
+              title="Settings"
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Settings</span>}
+            </Link>
+            <Link
+              href="/settings#connected"
+              className={cn(
+                'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
+                'text-muted-foreground',
+                collapsed && 'h-10 w-10 justify-center px-0'
+              )}
+              title="Connected Accounts"
+            >
+              <Plug className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Connected Accounts</span>}
+            </Link>
+          </>
+        )}
       </div>
 
       {/* 4. Account / profile at bottom */}

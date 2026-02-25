@@ -7,8 +7,10 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { CreditsCounter } from './credits-counter'
 import { CreditsPurchaseModalSimple } from './credits-purchase-modal-simple'
 import { AccountDetailsPage } from './account-details-page'
+import { ConnectedAccounts } from './connected-accounts'
 import { SidebarCollapseProvider, useSidebarCollapse } from './sidebar-collapse-context'
 import { HeaderTitleProvider, useHeaderTitle } from './header-title-context'
+import { DashboardTabProvider, type DashboardTab } from './dashboard-tab-context'
 import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
@@ -78,10 +80,19 @@ function DashboardHeader({
   )
 }
 
+/** Scrollable tab content wrapper so settings/connections/account can scroll inside the main area. */
+function TabScrollArea({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto pb-safe">{children}</div>
+    </div>
+  )
+}
+
 /** Renders header + main; must be inside HeaderTitleProvider so useHeaderTitle() sees the workflow title. */
 function DashboardShellInner({ user, profile, children, sidebar, currentPage, setCurrentPage, isCreditsModalOpen, setIsCreditsModalOpen, initials }: DashboardShellProps & {
-  currentPage: 'dashboard' | 'account'
-  setCurrentPage: (p: 'dashboard' | 'account') => void
+  currentPage: DashboardTab
+  setCurrentPage: (p: DashboardTab) => void
   isCreditsModalOpen: boolean
   setIsCreditsModalOpen: (v: boolean) => void
   initials: string
@@ -100,21 +111,42 @@ function DashboardShellInner({ user, profile, children, sidebar, currentPage, se
     </div>
   )
 
+  const mainContent =
+    currentPage === 'account' ? (
+      <AccountDetailsPage
+        user={user}
+        profile={profile}
+        onBack={() => setCurrentPage('dashboard')}
+        onOpenCreditsPurchase={() => setIsCreditsModalOpen(true)}
+      />
+    ) : currentPage === 'settings' ? (
+      <TabScrollArea>
+        <div className="mx-auto max-w-5xl px-4 py-6 md:px-6">
+          <h1 className="text-xl font-bold text-foreground tracking-tight">Settings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage your account, integrations, and AI agent permissions.
+          </p>
+          <div className="mt-6">
+            <ConnectedAccounts />
+          </div>
+        </div>
+      </TabScrollArea>
+    ) : currentPage === 'connections' ? (
+      <TabScrollArea>
+        <div className="mx-auto max-w-5xl px-4 py-6 md:px-6">
+          <ConnectedAccounts />
+        </div>
+      </TabScrollArea>
+    ) : (
+      children
+    )
+
   const headerAndMain = (
     <>
       <DashboardHeader sidebarPresent={sidebar != null} headerRight={headerRight} />
 
-      <main className="min-h-0 flex-1 overflow-hidden pb-safe px-safe">
-        {currentPage === 'account' ? (
-          <AccountDetailsPage
-            user={user}
-            profile={profile}
-            onBack={() => setCurrentPage('dashboard')}
-            onOpenCreditsPurchase={() => setIsCreditsModalOpen(true)}
-          />
-        ) : (
-          children
-        )}
+      <main className="min-h-0 flex-1 overflow-hidden pb-safe px-safe flex flex-col">
+        {mainContent}
       </main>
     </>
   )
@@ -148,7 +180,7 @@ function DashboardShellInner({ user, profile, children, sidebar, currentPage, se
 }
 
 export function DashboardShell({ user, profile, children, sidebar }: DashboardShellProps) {
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'account'>('dashboard')
+  const [currentPage, setCurrentPage] = useState<DashboardTab>('dashboard')
   const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false)
 
   const initials = profile?.full_name
@@ -162,18 +194,20 @@ export function DashboardShell({ user, profile, children, sidebar }: DashboardSh
 
   return (
     <HeaderTitleProvider>
-      <DashboardShellInner
-        user={user}
-        profile={profile}
-        sidebar={sidebar}
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        isCreditsModalOpen={isCreditsModalOpen}
-        setIsCreditsModalOpen={setIsCreditsModalOpen}
-        initials={initials}
-      >
-        {children}
-      </DashboardShellInner>
+      <DashboardTabProvider currentTab={currentPage} setCurrentTab={setCurrentPage}>
+        <DashboardShellInner
+          user={user}
+          profile={profile}
+          sidebar={sidebar}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          isCreditsModalOpen={isCreditsModalOpen}
+          setIsCreditsModalOpen={setIsCreditsModalOpen}
+          initials={initials}
+        >
+          {children}
+        </DashboardShellInner>
+      </DashboardTabProvider>
     </HeaderTitleProvider>
   )
 }

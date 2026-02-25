@@ -120,9 +120,9 @@ export function AccountDetailsPage({
   const isPaidUser = creditsData?.limits?.canDeployAgents ?? false
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Page Header with Back Button */}
-      <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="shrink-0 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="mx-auto max-w-7xl px-4 py-4 md:px-6">
           <div className="flex items-center gap-4">
             <button
@@ -139,7 +139,7 @@ export function AccountDetailsPage({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
           <div className="flex flex-col gap-8">
             {/* User Info */}
