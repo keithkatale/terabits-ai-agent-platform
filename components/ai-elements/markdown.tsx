@@ -182,53 +182,53 @@ const components: Partial<Components> = {
     <td className="px-4 py-2.5 text-sm text-foreground/90">{children}</td>
   ),
   h1: ({ children }) => (
-    <h1 className="mb-4 mt-7 text-[1.6rem] font-bold leading-tight tracking-tight text-foreground first:mt-0">
+    <h1 className="mb-4 mt-8 text-[1.75rem] font-extrabold leading-tight tracking-tight text-foreground first:mt-0 border-b-2 border-border pb-2">
       {children}
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mb-3 mt-6 text-[1.25rem] font-semibold leading-snug tracking-tight text-foreground first:mt-0 border-b border-border/50 pb-2">
+    <h2 className="mb-3 mt-7 text-[1.35rem] font-bold leading-snug tracking-tight text-foreground first:mt-0 border-b border-border/60 pb-1.5">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mb-2.5 mt-5 text-[1.05rem] font-semibold leading-snug text-foreground first:mt-0">
+    <h3 className="mb-2.5 mt-6 text-[1.15rem] font-bold leading-snug text-foreground first:mt-0">
       {children}
     </h3>
   ),
   h4: ({ children }) => (
-    <h4 className="mb-2 mt-4 text-[0.95rem] font-semibold uppercase tracking-wide text-muted-foreground first:mt-0">
+    <h4 className="mb-2 mt-5 text-[1rem] font-semibold uppercase tracking-wide text-foreground/80 first:mt-0">
       {children}
     </h4>
   ),
   p: ({ children }) => (
-    <p className="mb-3 text-[0.875rem] leading-[1.75] text-foreground/90 last:mb-0">{children}</p>
+    <p className="mb-3.5 text-[0.9625rem] font-[450] leading-[1.8] text-foreground last:mb-0">{children}</p>
   ),
   ul: ({ children }) => (
-    <ul className="my-3 list-disc space-y-1.5 pl-6 text-[0.875rem] leading-[1.75] text-foreground/90">{children}</ul>
+    <ul className="my-3.5 list-disc space-y-2 pl-6 text-[0.9625rem] font-[450] leading-[1.8] text-foreground">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="my-3 list-decimal space-y-1.5 pl-6 text-[0.875rem] leading-[1.75] text-foreground/90">{children}</ol>
+    <ol className="my-3.5 list-decimal space-y-2 pl-6 text-[0.9625rem] font-[450] leading-[1.8] text-foreground">{children}</ol>
   ),
-  li: ({ children }) => <li className="leading-[1.75]">{children}</li>,
+  li: ({ children }) => <li className="leading-[1.8]">{children}</li>,
   a: ({ href, children }) => (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+      className="font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
     >
       {children}
     </a>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="my-4 rounded-r-md border-l-[3px] border-primary/50 bg-primary/5 py-2 pl-4 pr-3 italic text-[0.875rem] leading-relaxed text-muted-foreground">
+    <blockquote className="my-4 rounded-r-md border-l-4 border-primary/60 bg-primary/5 py-2.5 pl-4 pr-3 text-[0.9625rem] font-[450] italic leading-relaxed text-foreground/80">
       {children}
     </blockquote>
   ),
-  hr: () => <hr className="my-5 border-border/50" />,
+  hr: () => <hr className="my-6 border-border/60" />,
   strong: ({ children }) => (
-    <strong className="font-semibold text-foreground">{children}</strong>
+    <strong className="font-bold text-foreground">{children}</strong>
   ),
   em: ({ children }) => <em className="italic text-foreground/80">{children}</em>,
   del: ({ children }) => (
