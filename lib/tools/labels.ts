@@ -17,4 +17,5 @@ export const TOOL_LABELS: Record<string, string> = {
   browser_automation: 'Browser automation',
   list_workflows: 'List your workflows',
   offer_save_workflow: 'Offer to save workflow',
+  offer_save_browser_session: 'Offer to save login',
 }

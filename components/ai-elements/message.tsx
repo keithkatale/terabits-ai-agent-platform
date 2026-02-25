@@ -41,9 +41,10 @@ export const MessageContent = ({
 }: MessageContentProps) => (
   <div
     className={cn(
-      'is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm',
-      'group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground',
-      'group-[.is-assistant]:text-base group-[.is-assistant]:font-medium group-[.is-assistant]:text-foreground',
+      'is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden',
+      'group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground group-[.is-user]:text-sm',
+      // Assistant: no forced font-size/weight — the Markdown components define the hierarchy
+      'group-[.is-assistant]:text-foreground',
       className
     )}
     {...props}
@@ -315,10 +316,7 @@ export type MessageResponseProps = HTMLAttributes<HTMLDivElement> & {
 export const MessageResponse = memo(
   ({ className, children, ...props }: MessageResponseProps) => (
     <div
-      className={cn(
-        'size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
-        className
-      )}
+      className={cn('w-full min-w-0', className)}
       {...props}
     >
       {typeof children === 'string' ? (

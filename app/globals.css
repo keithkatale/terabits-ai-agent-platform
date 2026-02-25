@@ -169,6 +169,11 @@
   100% { transform: translateX(0); }
 }
 
+@keyframes navigation-progress-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
 @layer utilities {
   .touch-target { min-width: 44px; min-height: 44px; }
   .animate-text-shimmer {
@@ -220,4 +225,10 @@
 
 .text-rotate-space {
   width: 0.25em;
+}
+
+@keyframes browser-progress {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(200%); }
+  100% { transform: translateX(600%); }
 }

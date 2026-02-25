@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { Plus, Search, PanelLeftClose, PanelLeft, ChevronDown, Workflow, MoreVertical, Trash2 } from 'lucide-react'
+import { Plus, Search, PanelLeftClose, PanelLeft, ChevronDown, Workflow, MoreVertical, Trash2, Settings, Plug } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/ui/logo'
 import {
@@ -38,7 +38,11 @@ export function DashboardChatSidebar({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const currentSession = searchParams.get('session')
+  // Prefer session from path /chat/[id]; fall back to legacy ?session=
+  const pathSession = pathname?.startsWith('/chat/') && pathname !== '/chat' && pathname !== '/chat/new'
+    ? pathname.replace(/^\/chat\//, '').split('/')[0]
+    : null
+  const currentSession = pathSession ?? searchParams.get('session')
   const [sessions, setSessions] = useState<Session[]>([])
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([])
   const [recentOpen, setRecentOpen] = useState(true)
@@ -180,7 +184,7 @@ export function DashboardChatSidebar({
                     )}
                   >
                     <Link
-                      href={`/chat?session=${encodeURIComponent(s.sessionId)}`}
+                      href={`/chat/${encodeURIComponent(s.sessionId)}`}
                       className={cn(
                         'min-w-0 flex-1 rounded-r-md py-2 pl-3 pr-1 text-sm text-foreground transition-colors hover:bg-secondary/50',
                         currentSession === s.sessionId && 'bg-secondary'
@@ -255,6 +259,34 @@ export function DashboardChatSidebar({
 
       {/* Spacer when collapsed so profile stays at bottom */}
       {collapsed && <div className="min-h-0 flex-1" />}
+
+      {/* Settings + Connected Accounts links */}
+      <div className={cn('shrink-0 px-3 pb-1 space-y-0.5', collapsed && 'flex flex-col items-center px-0')}>
+        <Link
+          href="/settings"
+          className={cn(
+            'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
+            pathname === '/settings' ? 'bg-secondary text-foreground' : 'text-muted-foreground',
+            collapsed && 'h-10 w-10 justify-center px-0'
+          )}
+          title="Settings"
+        >
+          <Settings className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Settings</span>}
+        </Link>
+        <Link
+          href="/settings#connected"
+          className={cn(
+            'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary/50',
+            'text-muted-foreground',
+            collapsed && 'h-10 w-10 justify-center px-0'
+          )}
+          title="Connected Accounts"
+        >
+          <Plug className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Connected Accounts</span>}
+        </Link>
+      </div>
 
       {/* 4. Account / profile at bottom */}
       <div className={cn('shrink-0 p-3', collapsed && 'w-full flex justify-center px-0')}>

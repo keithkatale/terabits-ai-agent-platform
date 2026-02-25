@@ -70,6 +70,14 @@ When using \`browser_automation\`, you must work in a strict **observe–act–o
 3. **Then perform the next action.** Only after you have the result, call \`browser_automation\` again with the next single step. This way you adapt to what the page actually shows (loading, verification, new content) instead of guessing.
 4. **Thought then action.** It is good to state your observation and intent before each tool call (e.g. "The page has loaded. I'll click the top product to get details.") so the user sees your reasoning, then run the single corresponding action.
 
+## Handling login forms
+When you navigate to a platform and see a login form, **never try to fill it yourself**. Always call \`request_credentials\` instead:
+1. Identify the fields visible in the screenshot (e.g. "Email or phone", "Password").
+2. Call \`request_credentials\` with those field names, their locator hints (label text, placeholder, or CSS selector), and the \`sessionId\`.
+3. The user will securely fill in their credentials — you will never see the values.
+4. After the user submits, you will receive a screenshot showing the result. Continue from there (handle 2FA prompts, verify login success, etc.).
+5. If login succeeds, you can continue with the task. If it fails (wrong password, CAPTCHA), describe what you see and ask the user.
+
 ## Limits
 - You have a maximum of 25 tool-call steps per turn. For large or multi-part requests, do what you can and summarise; suggest breaking the rest into a follow-up if needed.
 - Do not loop or repeat the same action. If something fails, say so and stop or try one alternative.
@@ -111,7 +119,12 @@ export async function POST(req: Request) {
     })
   }
 
-  const { messages, sessionId: bodySessionId } = body as { messages?: unknown[]; sessionId?: string }
+  const { messages, sessionId: bodySessionId, connectPlatform } = body as {
+    messages?: unknown[]
+    sessionId?: string
+    /** When set, use Gemini Computer Use for browser_automation and add offer_save_browser_session (connect-account flow). */
+    connectPlatform?: string
+  }
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return new Response(JSON.stringify({ error: 'messages array required' }), {
       status: 400,
@@ -148,11 +161,14 @@ export async function POST(req: Request) {
       .select('name, instruction_prompt')
       .eq('id', assistantAgentId)
       .single()
+    const basePrompt = ASSISTANT_SYSTEM_PROMPT + (connectPlatform
+      ? `\n\n## Connect-account flow (current request)\nYou are helping the user connect their account for a platform. Use \`browser_automation\` in **one step at a time** (observe–act–observe). Open the platform login page, guide them through logging in or creating an account. When you see they are successfully logged in (e.g. dashboard, profile, or a clear "Welcome" state), call \`offer_save_browser_session\` with the current \`sessionId\` and platform so they can save the session for future use.`
+      : '')
     systemPrompt = buildExecutionSystemPrompt(
       assistantAgent?.name ?? 'Assistant',
-      ASSISTANT_SYSTEM_PROMPT
+      basePrompt
     )
-    const assistantOnlyTools = {
+    const assistantOnlyTools: Record<string, ReturnType<typeof tool>> = {
       list_workflows: tool({
         description:
           'List the user\'s saved workflows. Use this to check if they already have a workflow that does a similar task (e.g. lead generation, research) before doing the task or offering to save a new workflow.',
@@ -201,19 +217,52 @@ export async function POST(req: Request) {
         },
       }),
     }
+    if (connectPlatform) {
+      assistantOnlyTools.offer_save_browser_session = tool({
+        description:
+          'Call this when the user has successfully logged in or created an account in the browser and you have a live browser session. It shows them a "Save login for [platform]" option so the AI can reuse this session later. Pass the current sessionId from the last browser_automation result.',
+        inputSchema: z.object({
+          platform: z.string().describe('Platform id, e.g. reddit, linkedin, github'),
+          sessionId: z.string().describe('The browser session ID from the last browser_automation result'),
+          platformLabel: z.string().optional().describe('Human-readable name, e.g. Reddit'),
+          platformUrl: z.string().optional().describe('Login URL for this platform'),
+        }),
+        execute: async ({ platform, sessionId, platformLabel, platformUrl }) => {
+          return {
+            __saveSessionOffer: true,
+            platform,
+            sessionId,
+            platformLabel: platformLabel ?? platform,
+            platformUrl,
+          }
+        },
+      })
+    }
     tools = { ...catalogTools, ...assistantOnlyTools }
   }
 
+  const execContext = !isGuest && user
+    ? { userId: user.id, browserMode: connectPlatform ? ('gemini' as const) : undefined }
+    : { userId: null as string | null, browserMode: undefined }
+
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (data: object) => controller.enqueue(sse(data))
+      const send = (data: object) => {
+        try {
+          controller.enqueue(sse(data))
+        } catch (e) {
+          const err = e as { code?: string; name?: string }
+          if (err?.code === 'ERR_INVALID_STATE' || err?.name === 'InvalidStateError') return
+          throw e
+        }
+      }
 
       const sessionId = typeof bodySessionId === 'string' && bodySessionId ? bodySessionId : crypto.randomUUID()
       const agentId = assistantAgentId
       let runLogId: string | null = null
 
-      if (!isGuest && user && agentId) {
-        await runWithExecutionContext({ userId: user.id }, async () => {
+      const doInsertsAndRun = async () => {
+        if (!isGuest && user && agentId) {
           const lastMsg = messages[messages.length - 1] as { role?: string; content?: string } | undefined
           const lastContent = typeof lastMsg?.content === 'string' ? lastMsg.content : ''
           const isFirstMessageInSession = messages.length === 1
@@ -256,12 +305,20 @@ export async function POST(req: Request) {
             .select('id')
             .single()
           runLogId = runLog?.id ?? null
-        })
+        }
+        send({ type: 'start', agentName: 'Assistant', sessionId, runId: runLogId, timestamp: Date.now() })
+        await runStream()
       }
 
-      send({ type: 'start', agentName: 'Assistant', sessionId, runId: runLogId, timestamp: Date.now() })
+      if (!isGuest && user && agentId) {
+        await runWithExecutionContext(execContext, async () => {
+          await doInsertsAndRun()
+        })
+      } else {
+        await doInsertsAndRun()
+      }
 
-      const runStream = async () => {
+      async function runStream() {
         try {
           const result = streamText({
             model: google('gemini-3-flash-preview'),
@@ -519,7 +576,6 @@ export async function POST(req: Request) {
           controller.close()
         }
       }
-      await runStream()
     },
   })
 

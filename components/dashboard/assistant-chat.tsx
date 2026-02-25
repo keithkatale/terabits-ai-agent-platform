@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, Component, type ErrorInfo, type ReactNode } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -28,6 +28,7 @@ import {
 } from '@/components/ai-elements/reasoning'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Tool } from '@/components/ai-elements/tool'
+import { CredentialForm, type CredentialField } from '@/components/ai-elements/credential-form'
 import {
   PromptInput,
   PromptInputBody,
@@ -188,6 +189,62 @@ export interface WorkflowOffer {
   inputFields: Array<{ name: string; label: string; type: string; placeholder?: string; required?: boolean }>
 }
 
+export interface SaveSessionOffer {
+  platform: string
+  sessionId: string
+  platformLabel: string
+  platformUrl: string
+}
+
+/**
+ * Rendered inside ChainOfThought when the AI calls request_credentials.
+ * Shows CredentialForm; on completion it fires a new user message to resume the AI.
+ */
+function CredentialFormInline({
+  output,
+  isStreaming,
+}: {
+  output: Record<string, unknown>
+  isStreaming: boolean
+}) {
+  const [done, setDone] = useState(false)
+  const [resultMsg, setResultMsg] = useState<string | null>(null)
+
+  if (!output || output.type !== 'credential_request') return null
+
+  const platform = String(output.platform ?? 'platform')
+  const sessionId = String(output.sessionId ?? '')
+  const fields = (output.fields as CredentialField[]) ?? []
+  const submitLabel = output.submitLabel ? String(output.submitLabel) : undefined
+  const submitSelector = output.submitSelector ? String(output.submitSelector) : undefined
+  const note = output.note ? String(output.note) : undefined
+
+  if (done && resultMsg) {
+    return (
+      <p className="text-xs text-muted-foreground">{resultMsg}</p>
+    )
+  }
+
+  return (
+    <CredentialForm
+      platform={platform}
+      sessionId={sessionId}
+      fields={fields}
+      submitLabel={submitLabel}
+      submitSelector={submitSelector}
+      note={note}
+      onComplete={({ url, success }) => {
+        setDone(true)
+        setResultMsg(
+          success
+            ? `✓ Signed in — now at ${url || platform}`
+            : `Login attempt failed — check credentials`
+        )
+      }}
+    />
+  )
+}
+
 /** Catches render errors so the UI shows a message instead of blank/black. */
 class ChatErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null }
@@ -299,11 +356,14 @@ function AssistantMessageContent({
   content,
   isStreaming,
   defaultOpenChain,
+  showCredentialFormInCard,
 }: {
   steps: AssistantStep[]
   content: string
   isStreaming: boolean
   defaultOpenChain: boolean
+  /** When true, credential_request steps show only a short message; the form is in the prominent card above input */
+  showCredentialFormInCard?: boolean
 }) {
   const chainThoughtScrollRef = useRef<HTMLDivElement>(null)
   const reasoningScrollRef = useRef<HTMLDivElement>(null)
@@ -313,8 +373,10 @@ function AssistantMessageContent({
   const reasoningText = getReasoningText(steps)
   const creditsStep = steps.find((s) => s.type === 'credits')
   const showReasoningBlock = !showChainOfThought && (isStreaming || reasoningText.length > 0)
-  // When chain of thought is shown, keep reasoning only in the dropdown; final reply = answer only (no duplicate narrative)
+  // When chain of thought is shown, keep reasoning only in the dropdown; final reply = answer only (no duplicate narrative). reasoningText is only from 'reasoning' steps, not output.
   const displayContent = showChainOfThought && reasoningText.length > 0 ? getAnswerOnly(content, reasoningText) : content
+  // When not streaming, default reasoning/thinking dropdown to closed so the final output is the focus.
+  const reasoningDefaultOpen = isStreaming
 
   // Auto-scroll chain-of-thought window to bottom when steps or streaming content updates
   useEffect(() => {
@@ -355,26 +417,45 @@ function AssistantMessageContent({
                     status={status}
                   >
                     {step.type === 'reasoning' && (
-                      <Reasoning className="w-full" isStreaming={isStreaming && isLast} defaultOpen={isStreaming && isLast}>
+                      <Reasoning className="w-full" isStreaming={isStreaming && isLast} defaultOpen={reasoningDefaultOpen && isLast}>
                         <ReasoningTrigger />
                         <ReasoningContent>{step.message}</ReasoningContent>
                       </Reasoning>
                     )}
                     {step.type === 'thinking' && (
-                      <Reasoning className="w-full" isStreaming={isStreaming && isLast && !step.message} defaultOpen={isStreaming && isLast || !!step.message}>
+                      <Reasoning className="w-full" isStreaming={isStreaming && isLast} defaultOpen={reasoningDefaultOpen && isLast}>
                         <ReasoningTrigger />
                         <ReasoningContent>{step.message}</ReasoningContent>
                       </Reasoning>
                     )}
-                    {step.type === 'tool' && step.toolData && (
-                      <Tool
-                        name={step.toolData.name}
-                        state={step.toolData.state}
-                        input={step.toolData.input}
-                        output={step.toolData.output}
-                        defaultOpen={step.toolData.state === 'completed' || step.toolData.state === 'error'}
-                      />
-                    )}
+                    {step.type === 'tool' && step.toolData && (() => {
+                      const out = step.toolData.output
+                      // Credential request — show form inline or short message when form is in prominent card
+                      if (out?.type === 'credential_request') {
+                        if (showCredentialFormInCard) {
+                          return (
+                            <p className="text-xs text-muted-foreground">
+                              Enter your credentials in the form below. The AI will fill them into the browser and continue after you submit.
+                            </p>
+                          )
+                        }
+                        return (
+                          <CredentialFormInline
+                            output={out}
+                            isStreaming={isStreaming}
+                          />
+                        )
+                      }
+                      return (
+                        <Tool
+                          name={step.toolData.name}
+                          state={step.toolData.state}
+                          input={step.toolData.input}
+                          output={out}
+                          defaultOpen={step.toolData.state === 'completed' || step.toolData.state === 'error'}
+                        />
+                      )
+                    })()}
                     {step.type === 'credits' && (
                       <p className="text-xs text-muted-foreground">{step.message}</p>
                     )}
@@ -393,12 +474,12 @@ function AssistantMessageContent({
         </div>
       )}
 
-      {/* Default: Reasoning per doc — auto-opens when streaming; scrollable window with max height */}
+      {/* Default: Reasoning per doc — open only while streaming; closed when output is shown */}
       {showReasoningBlock && (
         <Reasoning
           className="w-full"
           isStreaming={isStreaming && !content && reasoningText.length === 0}
-          defaultOpen={isStreaming || reasoningText.length > 0}
+          defaultOpen={reasoningDefaultOpen}
         >
           <ReasoningTrigger />
           <div
@@ -437,7 +518,8 @@ function AssistantMessageContent({
   )
 }
 
-export function AssistantChat({ guest = false }: { guest?: boolean }) {
+export function AssistantChat({ guest = false, initialSessionId }: { guest?: boolean; initialSessionId?: string }) {
+  const router = useRouter()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [steps, setSteps] = useState<AssistantStep[]>([])
@@ -448,11 +530,14 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
   const [creditsUsed, setCreditsUsed] = useState<number | null>(null)
   const [workflowOffer, setWorkflowOffer] = useState<WorkflowOffer | null>(null)
   const [workflowSaving, setWorkflowSaving] = useState(false)
+  const [saveSessionOffer, setSaveSessionOffer] = useState<SaveSessionOffer | null>(null)
+  const [saveSessionSaving, setSaveSessionSaving] = useState(false)
   const [activePresetTab, setActivePresetTab] = useState(0)
   const [signInModalOpen, setSignInModalOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const initialQuerySent = useRef(false)
+  const connectPlatformRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const stepsRef = useRef<AssistantStep[]>([])
   const finalTextRef = useRef('')
@@ -460,6 +545,9 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
   const currentRunIdRef = useRef<string | null>(null)
   const [recentSessions, setRecentSessions] = useState<{ sessionId: string; preview: string; updatedAt: string }[]>([])
   const conversationScrollRef = useRef<HTMLDivElement>(null)
+  /** When set, show credential form in a prominent card above input (not only in thought process) */
+  const [pendingCredentialRequest, setPendingCredentialRequest] = useState<Record<string, unknown> | null>(null)
+  const [credentialTimerSeconds, setCredentialTimerSeconds] = useState<number | null>(null)
 
   // Load recent conversations list (for opening as chat) — skip when guest
   useEffect(() => {
@@ -472,10 +560,10 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
       .catch(() => {})
   }, [guest, messages.length])
 
-  // Load persisted conversation when session is in URL — skip when guest
+  // Load persisted conversation when session is in URL or path (/chat/[id]) — skip when guest
   useEffect(() => {
     if (guest) return
-    const sid = searchParams.get('session')?.trim()
+    const sid = (initialSessionId ?? searchParams.get('session')?.trim()) || null
     if (!sid || isStreaming || messages.length > 0) return
     sessionIdRef.current = sid
     fetch(`/api/chat/session?sessionId=${encodeURIComponent(sid)}`)
@@ -500,7 +588,7 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
         )
       })
       .catch(() => {})
-  }, [guest, searchParams, isStreaming, messages.length])
+  }, [guest, initialSessionId, searchParams, isStreaming, messages.length])
 
   // Scroll to end when a new message is added
   const prevMessagesLen = useRef(messages.length)
@@ -535,10 +623,24 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
     }
   }, [])
 
-  // Initial query from hero ?q=
+  // Initial query from hero ?q= or connect flow ?connect=&prompt=
   useEffect(() => {
     const q = searchParams.get('q')?.trim()
-    if (q && messages.length === 0 && !isStreaming && !initialQuerySent.current) {
+    const connect = searchParams.get('connect')?.trim()
+    const prompt = searchParams.get('prompt')?.trim()
+    if (messages.length > 0 || isStreaming || initialQuerySent.current) return
+    if (connect && prompt) {
+      initialQuerySent.current = true
+      connectPlatformRef.current = connect
+      setInputValue(prompt)
+      const u = new URL(window.location.href)
+      u.searchParams.delete('connect')
+      u.searchParams.delete('prompt')
+      window.history.replaceState({}, '', u.pathname + u.search)
+      setTimeout(() => handleSubmit(prompt), 0)
+      return
+    }
+    if (q) {
       initialQuerySent.current = true
       setInputValue(q)
       const u = new URL(window.location.href)
@@ -547,6 +649,37 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
       setTimeout(() => handleSubmit(q), 0)
     }
   }, [searchParams, messages.length, isStreaming])
+
+  // 2-minute countdown for credential form; when it hits 0, clear the pending request
+  const credentialTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    if (pendingCredentialRequest == null || credentialTimerSeconds == null || credentialTimerSeconds <= 0) {
+      if (credentialTimerRef.current) {
+        clearInterval(credentialTimerRef.current)
+        credentialTimerRef.current = null
+      }
+      return
+    }
+    credentialTimerRef.current = setInterval(() => {
+      setCredentialTimerSeconds((s) => {
+        if (s == null || s <= 1) {
+          if (credentialTimerRef.current) {
+            clearInterval(credentialTimerRef.current)
+            credentialTimerRef.current = null
+          }
+          setPendingCredentialRequest(null)
+          return null
+        }
+        return s - 1
+      })
+    }, 1000)
+    return () => {
+      if (credentialTimerRef.current) {
+        clearInterval(credentialTimerRef.current)
+        credentialTimerRef.current = null
+      }
+    }
+  }, [pendingCredentialRequest, credentialTimerSeconds])
 
   useEffect(() => {
     if (guest) return
@@ -569,6 +702,9 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
     setFinalOutput(null)
     setCreditsUsed(null)
     setWorkflowOffer(null)
+    setSaveSessionOffer(null)
+    setPendingCredentialRequest(null)
+    setCredentialTimerSeconds(null)
     setIsStreaming(true)
     stepsRef.current = []
     finalTextRef.current = ''
@@ -583,10 +719,16 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
     const signal = controller.signal
 
     try {
+      const connectPlatform = connectPlatformRef.current ?? undefined
+      if (connectPlatform) connectPlatformRef.current = null
       const response = await fetch('/api/chat/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: body, sessionId: sessionIdRef.current ?? undefined }),
+        body: JSON.stringify({
+          messages: body,
+          sessionId: sessionIdRef.current ?? undefined,
+          ...(connectPlatform ? { connectPlatform } : {}),
+        }),
         signal,
       })
 
@@ -625,9 +767,7 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
             if (data.type === 'start') {
               if (data.sessionId) sessionIdRef.current = data.sessionId
               if (!guest && data.sessionId) {
-                const u = new URL(window.location.href)
-                u.searchParams.set('session', data.sessionId)
-                window.history.replaceState({}, '', u.pathname + u.search)
+                router.replace(`/chat/${data.sessionId}`)
               }
               if (data.runId) currentRunIdRef.current = data.runId
             } else if (data.type === 'reasoning') {
@@ -645,16 +785,7 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
               const delta = data.delta || ''
               setCurrentAssistantText((t) => t + delta)
               finalTextRef.current += delta
-              setSteps((prev) => {
-                const current = prev.find((s) => s.id === assistantStepId)
-                const newMsg = (current?.message || '') + delta
-                const next = [
-                  ...prev.filter((s) => s.id !== assistantStepId),
-                  { id: assistantStepId, type: 'thinking' as const, message: newMsg, timestamp: new Date() },
-                ]
-                stepsRef.current = next
-                return next
-              })
+              // Do not add assistant (final output) text to steps — it must only appear in the message content below, not inside the reasoning/thinking dropdown.
             } else if (data.type === 'tool') {
               if (data.tool === 'offer_save_workflow' && data.status === 'completed' && data.output?.__workflowOffer) {
                 const o = data.output as {
@@ -671,6 +802,31 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
                     inputFields: Array.isArray(o.inputFields) ? o.inputFields : [],
                   })
                 }
+              }
+              if (data.tool === 'offer_save_browser_session' && data.status === 'completed' && data.output?.__saveSessionOffer) {
+                const o = data.output as { platform?: string; sessionId?: string; platformLabel?: string; platformUrl?: string }
+                if (o.platform && o.sessionId) {
+                  const defaultUrls: Record<string, string> = {
+                    linkedin: 'https://www.linkedin.com/login',
+                    twitter: 'https://x.com/login',
+                    instagram: 'https://www.instagram.com/accounts/login/',
+                    facebook: 'https://www.facebook.com/',
+                    reddit: 'https://www.reddit.com/login/',
+                    producthunt: 'https://www.producthunt.com/login',
+                    github: 'https://github.com/login',
+                    notion: 'https://www.notion.so/login',
+                  }
+                  setSaveSessionOffer({
+                    platform: o.platform,
+                    sessionId: o.sessionId,
+                    platformLabel: o.platformLabel ?? o.platform,
+                    platformUrl: o.platformUrl ?? defaultUrls[o.platform] ?? `https://${o.platform}.com`,
+                  })
+                }
+              }
+              if (data.tool === 'request_credentials' && data.status === 'completed' && data.output?.type === 'credential_request') {
+                setPendingCredentialRequest((data.output as Record<string, unknown>) ?? null)
+                setCredentialTimerSeconds(120)
               }
               const toolLabel = String(TOOL_LABELS[data.tool] ?? data.tool ?? 'Tool')
               const state = data.status === 'completed' ? 'completed' : data.status === 'error' ? 'error' : 'running'
@@ -966,6 +1122,7 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
                       }
                       isStreaming={isStreaming}
                       defaultOpenChain={isStreaming}
+                      showCredentialFormInCard={!!pendingCredentialRequest}
                     />
                   </MessageContent>
                 </Message>
@@ -978,6 +1135,38 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
       </Conversation>
 
       <div className={cn('flex shrink-0 flex-col items-center gap-2 px-4 pb-4', messages.length === 0 && !isStreaming && 'hidden')}>
+        {pendingCredentialRequest && pendingCredentialRequest.type === 'credential_request' && (
+          <div className="w-full max-w-2xl rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 shadow-lg p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold text-foreground">
+                Sign in required — enter credentials below
+              </p>
+              {credentialTimerSeconds != null && credentialTimerSeconds > 0 && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {Math.floor(credentialTimerSeconds / 60)}:{(credentialTimerSeconds % 60).toString().padStart(2, '0')} remaining
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              The AI has paused. Enter your credentials below; they will be filled into the browser and the AI will continue after you submit.
+            </p>
+            <CredentialForm
+              platform={String(pendingCredentialRequest.platform ?? 'platform')}
+              sessionId={String(pendingCredentialRequest.sessionId ?? '')}
+              fields={(pendingCredentialRequest.fields as CredentialField[]) ?? []}
+              submitLabel={pendingCredentialRequest.submitLabel ? String(pendingCredentialRequest.submitLabel) : undefined}
+              submitSelector={pendingCredentialRequest.submitSelector ? String(pendingCredentialRequest.submitSelector) : undefined}
+              note={pendingCredentialRequest.note ? String(pendingCredentialRequest.note) : undefined}
+              onComplete={({ success }) => {
+                setPendingCredentialRequest(null)
+                setCredentialTimerSeconds(null)
+                if (success) {
+                  setTimeout(() => handleSubmit('Credentials have been submitted. Please check the current page and continue.'), 100)
+                }
+              }}
+            />
+          </div>
+        )}
         {workflowOffer && (
           <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-lg p-4 flex items-center gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -1040,6 +1229,69 @@ export function AssistantChat({ guest = false }: { guest?: boolean }) {
                   </>
                 ) : (
                   'Save'
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+        {saveSessionOffer && (
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-lg p-4 flex items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/10">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-foreground">Save login for {saveSessionOffer.platformLabel}?</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                You’re logged in. Save this session so the AI can reuse it for future tasks on {saveSessionOffer.platformLabel}.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setSaveSessionOffer(null)}
+                disabled={saveSessionSaving}
+              >
+                Not now
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={saveSessionSaving}
+                onClick={async () => {
+                  if (!saveSessionOffer) return
+                  setSaveSessionSaving(true)
+                  try {
+                    const res = await fetch('/api/browser-sessions', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        sessionId: saveSessionOffer.sessionId,
+                        platform: saveSessionOffer.platform,
+                        platformLabel: saveSessionOffer.platformLabel,
+                        platformUrl: saveSessionOffer.platformUrl,
+                      }),
+                    })
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}))
+                      throw new Error(err.error || 'Failed to save session')
+                    }
+                    setSaveSessionOffer(null)
+                  } catch (e) {
+                    console.error(e)
+                  } finally {
+                    setSaveSessionSaving(false)
+                  }
+                }}
+              >
+                {saveSessionSaving ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                    Saving…
+                  </>
+                ) : (
+                  'Save login'
                 )}
               </Button>
             </div>

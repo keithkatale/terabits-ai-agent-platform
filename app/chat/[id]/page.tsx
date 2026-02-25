@@ -5,10 +5,10 @@ export default async function ChatByIdPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await params
+  const { id } = await params
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <AssistantChat />
+      <AssistantChat initialSessionId={id} />
     </div>
   )
 }

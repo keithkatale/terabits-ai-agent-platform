@@ -4,13 +4,21 @@
  * - GET / — status page with link to /logs
  * - GET /health — health check
  * - GET /logs — recent request/error log (for debugging)
- * - POST /run (JSON body: { steps }) → runs steps, returns JSON with all step results + screenshots
+ * - POST /run (JSON body: { sessionId?, steps }) → runs steps, returns JSON with steps + sessionId (sessions persist for TTL)
  * - POST /run?stream=1 (same body) → SSE stream: one event per step (stepIndex, action, screenshotBase64)
+ * - DELETE /session/:sessionId — close a session
+ *
+ * Sessions: pass sessionId to reuse the same browser; omit to create a new one. Response always includes sessionId.
+ * Wait: navigate supports waitUntil ('domcontentloaded'|'load'|'networkidle') and timeout; action "wait" supports delay and/or selector.
+ * Stealth: uses playwright-extra + puppeteer-extra-plugin-stealth to reduce bot detection.
  */
 
 import express from 'express'
 import cors from 'cors'
-import { chromium } from 'playwright'
+import { chromium } from 'playwright-extra'
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+
+chromium.use(StealthPlugin())
 
 const app = express()
 app.use(cors())
@@ -18,9 +26,13 @@ app.use(express.json({ limit: '1mb' }))
 
 const PORT = Number(process.env.PORT) || 3030
 const SECRET = process.env.BROWSER_WORKER_SECRET?.trim() || null
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS) || 15 * 60 * 1000 // 15 min
 
 const MAX_LOG_ENTRIES = 100
 const logEntries = []
+
+// sessionId -> { browser, context, page, lastUsedAt }
+const sessions = new Map()
 
 function log(level, message, meta = {}) {
   const entry = {
@@ -49,6 +61,64 @@ function checkAuth(req, res) {
   return true
 }
 
+function randomId() {
+  return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+async function createNewSession(sessionId) {
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+    ],
+  })
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    ignoreHTTPSErrors: true,
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  })
+  const page = await context.newPage()
+  const entry = { browser, context, page, lastUsedAt: Date.now() }
+  sessions.set(sessionId, entry)
+  log('info', 'Session created', { sessionId })
+  return entry
+}
+
+async function getOrCreateSession(requestedId) {
+  const existing = requestedId ? sessions.get(requestedId) : null
+  if (existing) {
+    existing.lastUsedAt = Date.now()
+    return { sessionId: requestedId, ...existing }
+  }
+  const id = requestedId || randomId()
+  const entry = await createNewSession(id)
+  return { sessionId: id, ...entry }
+}
+
+function closeSession(sessionId) {
+  const entry = sessions.get(sessionId)
+  if (!entry) return
+  sessions.delete(sessionId)
+  entry.browser.close().catch(() => {})
+  log('info', 'Session closed', { sessionId })
+}
+
+function cleanupExpiredSessions() {
+  const now = Date.now()
+  for (const [id, entry] of sessions.entries()) {
+    if (now - entry.lastUsedAt > SESSION_TTL_MS) {
+      closeSession(id)
+    }
+  }
+}
+
+// Run every 2 minutes
+setInterval(cleanupExpiredSessions, 2 * 60 * 1000)
+
 app.get('/', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.send(`
@@ -57,18 +127,18 @@ app.get('/', (req, res) => {
 <head><meta charset="utf-8"><title>Browser Worker</title></head>
 <body style="font-family:system-ui;max-width:640px;margin:2rem auto;padding:1rem;">
   <h1>Terabits Browser Worker</h1>
-  <p>Playwright worker for navigate / snapshot / click / fill. Use with Terabits app.</p>
+  <p>Playwright worker for navigate / snapshot / click / fill / wait. Uses sessions and stealth.</p>
   <ul>
     <li><a href="/health">/health</a> — health check</li>
     <li><a href="/logs">/logs</a> — recent logs and errors</li>
   </ul>
-  <p><small>POST /run with body <code>{"steps":[...]}</code> to run browser steps.</small></p>
+  <p><small>POST /run with body <code>{"steps":[...]}</code> or <code>{"sessionId":"...", "steps":[...]}</code>. Response includes sessionId for reuse.</small></p>
 </body>
 </html>`)
 })
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'terabits-browser-worker' })
+  res.json({ ok: true, service: 'terabits-browser-worker', sessions: sessions.size })
 })
 
 app.get('/logs', (req, res) => {
@@ -105,10 +175,114 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
+app.delete('/session/:sessionId', (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { sessionId } = req.params
+  if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId required' })
+  closeSession(sessionId)
+  res.json({ success: true, message: 'Session closed' })
+})
+
+/**
+ * GET /session/:sessionId/screenshot
+ * Returns the current screenshot of the session as a base64-encoded PNG.
+ * Used by the browser panel to poll for live updates.
+ */
+app.get('/session/:sessionId/screenshot', async (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { sessionId } = req.params
+  const entry = sessions.get(sessionId)
+  if (!entry) return res.status(404).json({ success: false, error: 'Session not found' })
+  try {
+    const buf = await entry.page.screenshot({ type: 'png', encoding: 'base64', fullPage: false })
+    const screenshotBase64 = typeof buf === 'string' ? buf : buf?.toString?.('base64') ?? null
+    const url = entry.page.url()
+    const title = await entry.page.title().catch(() => '')
+    res.json({ success: true, screenshotBase64, url, title, sessionId })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e) })
+  }
+})
+
+/**
+ * GET /session/:sessionId/info
+ * Returns current page URL + title without taking a screenshot.
+ */
+app.get('/session/:sessionId/info', async (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { sessionId } = req.params
+  const entry = sessions.get(sessionId)
+  if (!entry) return res.status(404).json({ success: false, error: 'Session not found' })
+  try {
+    const url = entry.page.url()
+    const title = await entry.page.title().catch(() => '')
+    res.json({ success: true, url, title, sessionId })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e) })
+  }
+})
+
+/**
+ * POST /session/:sessionId/interact
+ * Lets the user (not the agent) interact with the browser directly.
+ * Used for the human-handoff flow (e.g. login).
+ * Body: { action: 'click'|'type'|'navigate'|'key', x?, y?, text?, url?, key? }
+ */
+app.post('/session/:sessionId/interact', async (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { sessionId } = req.params
+  const entry = sessions.get(sessionId)
+  if (!entry) return res.status(404).json({ success: false, error: 'Session not found' })
+
+  const { action, x, y, text, url: targetUrl, key } = req.body || {}
+  const { page } = entry
+  entry.lastUsedAt = Date.now()
+
+  try {
+    if (action === 'click') {
+      if (typeof x !== 'number' || typeof y !== 'number') {
+        return res.status(400).json({ success: false, error: 'x and y required for click' })
+      }
+      await page.mouse.click(x, y)
+    } else if (action === 'type') {
+      if (typeof text !== 'string') {
+        return res.status(400).json({ success: false, error: 'text required for type' })
+      }
+      await page.keyboard.type(text, { delay: 30 })
+    } else if (action === 'key') {
+      if (typeof key !== 'string') {
+        return res.status(400).json({ success: false, error: 'key required for key action' })
+      }
+      await page.keyboard.press(key)
+    } else if (action === 'navigate') {
+      if (typeof targetUrl !== 'string') {
+        return res.status(400).json({ success: false, error: 'url required for navigate' })
+      }
+      await page.goto(targetUrl, { waitUntil: 'load', timeout: 60000 })
+    } else if (action === 'scroll') {
+      if (typeof x !== 'number' || typeof y !== 'number') {
+        return res.status(400).json({ success: false, error: 'x and y (delta) required for scroll' })
+      }
+      await page.mouse.wheel(x, y)
+    } else {
+      return res.status(400).json({ success: false, error: `Unknown action: ${action}` })
+    }
+
+    // Return updated screenshot after the interaction
+    const buf = await page.screenshot({ type: 'png', encoding: 'base64', fullPage: false })
+    const screenshotBase64 = typeof buf === 'string' ? buf : buf?.toString?.('base64') ?? null
+    const currentUrl = page.url()
+    const title = await page.title().catch(() => '')
+    res.json({ success: true, screenshotBase64, url: currentUrl, title, sessionId })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e) })
+  }
+})
+
 app.post('/run', async (req, res) => {
   if (!checkAuth(req, res)) return
   const stream = req.query.stream === '1' || req.headers.accept === 'text/event-stream'
-  const { steps } = req.body || {}
+  const { steps, sessionId: requestedSessionId } = req.body || {}
 
   if (!Array.isArray(steps) || steps.length === 0) {
     log('warn', 'POST /run missing steps')
@@ -119,10 +293,9 @@ app.post('/run', async (req, res) => {
     return res.status(400).json({ success: false, error: 'max 15 steps' })
   }
 
-  log('info', 'POST /run start', { stepCount: steps.length })
+  log('info', 'POST /run start', { stepCount: steps.length, sessionId: requestedSessionId || 'new' })
   const results = []
-  let browser
-  let page
+  let resolvedSessionId
 
   const emitStep = (payload) => {
     results.push(payload)
@@ -141,15 +314,8 @@ app.post('/run', async (req, res) => {
       res.flushHeaders?.()
     }
 
-    browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    })
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      ignoreHTTPSErrors: true,
-    })
-    page = await context.newPage()
+    const { sessionId: sid, page } = await getOrCreateSession(requestedSessionId || null)
+    resolvedSessionId = sid
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i]
@@ -160,7 +326,25 @@ app.post('/run', async (req, res) => {
       try {
         if (action === 'navigate') {
           const url = step.url || 'about:blank'
-          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+          const waitUntil = step.waitUntil || 'load'
+          const timeout = step.timeout ?? 60000
+          if (!['domcontentloaded', 'load', 'networkidle'].includes(waitUntil)) {
+            throw new Error(`waitUntil must be domcontentloaded, load, or networkidle, got: ${waitUntil}`)
+          }
+          await page.goto(url, { waitUntil, timeout })
+        } else if (action === 'wait') {
+          const delay = step.delay
+          const selector = step.selector
+          const selectorTimeout = step.selectorTimeout ?? 15000
+          if (typeof delay === 'number' && delay > 0) {
+            await new Promise((r) => setTimeout(r, delay))
+          }
+          if (selector) {
+            await page.waitForSelector(selector, { state: 'visible', timeout: selectorTimeout })
+          }
+          if (typeof delay !== 'number' && !selector) {
+            throw new Error('wait action requires delay (ms) and/or selector')
+          }
         } else if (action === 'click') {
           const selector = step.selector
           if (!selector) throw new Error('selector required for click')
@@ -171,7 +355,6 @@ app.post('/run', async (req, res) => {
           if (!selector) throw new Error('selector required for fill')
           await page.fill(selector, value, { timeout: 10000 })
         }
-        // snapshot: just take screenshot; navigate/click/fill also get a screenshot below
         const buf = await page.screenshot({
           type: 'png',
           encoding: 'base64',
@@ -197,19 +380,19 @@ app.post('/run', async (req, res) => {
       emitStep(payload)
     }
 
-    log('info', 'POST /run success', { stepCount: results.length })
+    log('info', 'POST /run success', { stepCount: results.length, sessionId: resolvedSessionId })
     if (stream) {
-      res.write(sseEvent({ type: 'done', success: true, steps: results }))
+      res.write(sseEvent({ type: 'done', success: true, steps: results, sessionId: resolvedSessionId }))
       res.end()
     } else {
-      res.json({ success: true, steps: results })
+      res.json({ success: true, steps: results, sessionId: resolvedSessionId })
     }
   } catch (err) {
     const msg = err?.message || String(err)
     log('error', 'POST /run failed', { error: msg })
     if (stream && res.headersSent) {
       try {
-        res.write(sseEvent({ type: 'done', success: false, error: msg, steps: results }))
+        res.write(sseEvent({ type: 'done', success: false, error: msg, steps: results, sessionId: resolvedSessionId }))
         res.end()
       } catch (_) {
         res.end()
@@ -219,10 +402,223 @@ app.post('/run', async (req, res) => {
         success: false,
         error: msg,
         steps: results,
+        sessionId: resolvedSessionId ?? undefined,
       })
     }
-  } finally {
-    if (browser) await browser.close().catch(() => {})
+  }
+})
+
+/**
+ * POST /session/:sessionId/smart-fill
+ * Fills a login (or any) form using Playwright smart locators — no pixel
+ * coordinates needed. Tries label → placeholder → CSS selector in order.
+ * Body: {
+ *   fields: [{ label?, placeholder?, selector?, type?, value }],
+ *   submitLabel?,    // text of the submit button (e.g. "Sign in")
+ *   submitSelector?, // CSS fallback for the submit button
+ *   waitAfterMs?     // ms to wait after submitting before screenshot (default 3000)
+ * }
+ */
+app.post('/session/:sessionId/smart-fill', async (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { sessionId } = req.params
+  const entry = sessions.get(sessionId)
+  if (!entry) return res.status(404).json({ success: false, error: 'Session not found' })
+
+  const { fields = [], submitLabel, submitSelector, waitAfterMs = 3000 } = req.body || {}
+  const { page } = entry
+  entry.lastUsedAt = Date.now()
+
+  const filled = []
+  const errors = []
+
+  try {
+    for (const field of fields) {
+      const { label, placeholder, selector, value = '' } = field
+      try {
+        let locator = null
+        // Priority: accessible label → placeholder → CSS selector → input[type]
+        if (label) {
+          locator = page.getByLabel(label, { exact: false })
+          if (!(await locator.count())) locator = null
+        }
+        if (!locator && placeholder) {
+          locator = page.getByPlaceholder(placeholder, { exact: false })
+          if (!(await locator.count())) locator = null
+        }
+        if (!locator && selector) {
+          locator = page.locator(selector)
+          if (!(await locator.count())) locator = null
+        }
+        if (!locator) {
+          errors.push({ field: label || placeholder || selector, error: 'Could not locate field' })
+          continue
+        }
+        await locator.first().click({ timeout: 5000 })
+        await locator.first().fill(value, { timeout: 5000 })
+        filled.push(label || placeholder || selector)
+      } catch (e) {
+        errors.push({ field: label || placeholder || selector, error: e?.message || String(e) })
+      }
+    }
+
+    // Submit the form
+    let submitted = false
+    if (submitLabel) {
+      try {
+        const btn = page.getByRole('button', { name: new RegExp(submitLabel, 'i') })
+          .or(page.getByRole('button', { name: submitLabel, exact: false }))
+        if (await btn.count()) { await btn.first().click({ timeout: 8000 }); submitted = true }
+      } catch { /* fall through to selector */ }
+    }
+    if (!submitted && submitSelector) {
+      try { await page.click(submitSelector, { timeout: 8000 }); submitted = true } catch { /* ignore */ }
+    }
+    if (!submitted) {
+      // Last resort: press Enter on the last filled field
+      try { await page.keyboard.press('Enter'); submitted = true } catch { /* ignore */ }
+    }
+
+    // Wait for navigation / response
+    if (submitted && waitAfterMs > 0) {
+      await Promise.race([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: waitAfterMs }).catch(() => {}),
+        new Promise(r => setTimeout(r, waitAfterMs)),
+      ])
+    }
+
+    const buf = await page.screenshot({ type: 'jpeg', quality: 70, encoding: 'base64', fullPage: false })
+    const screenshotBase64 = typeof buf === 'string' ? buf : buf?.toString?.('base64') ?? null
+    const url = page.url()
+    const title = await page.title().catch(() => '')
+
+    res.json({ success: true, filled, errors, submitted, screenshotBase64, url, title, sessionId })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e), filled, errors })
+  }
+})
+
+/**
+ * GET /session/:sessionId/stream
+ * Server-Sent Events endpoint — pushes JPEG screenshots every 300ms when the
+ * page has visually changed. Used by the live browser panel in the UI instead
+ * of polling. Much lower latency than REST polling.
+ */
+app.get('/session/:sessionId/stream', async (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { sessionId } = req.params
+  const entry = sessions.get(sessionId)
+  if (!entry) return res.status(404).json({ success: false, error: 'Session not found' })
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no') // disable nginx/Railway buffering
+  res.flushHeaders?.()
+
+  let lastHash = ''
+  let active = true
+
+  const push = async () => {
+    if (!active) return
+    const e = sessions.get(sessionId)
+    if (!e) {
+      res.write(`data: ${JSON.stringify({ type: 'session_closed' })}\n\n`)
+      res.end()
+      active = false
+      return
+    }
+    try {
+      // JPEG at 60% quality — fast, small, good enough for live view
+      const buf = await e.page.screenshot({ type: 'jpeg', quality: 60, fullPage: false })
+      const b64 = typeof buf === 'string' ? buf : buf.toString('base64')
+
+      // Only send if something changed (md5-like comparison via first 32 bytes)
+      const hash = b64.slice(0, 32)
+      if (hash !== lastHash) {
+        lastHash = hash
+        const url = e.page.url()
+        res.write(`data: ${JSON.stringify({ type: 'frame', screenshotBase64: b64, url, sessionId })}\n\n`)
+      }
+    } catch {
+      // page may be navigating — skip this frame, try next tick
+    }
+  }
+
+  const interval = setInterval(push, 300)
+  // Send a keepalive comment every 15s to prevent proxy timeouts
+  const keepalive = setInterval(() => { if (active) res.write(': keepalive\n\n') }, 15_000)
+
+  req.on('close', () => {
+    active = false
+    clearInterval(interval)
+    clearInterval(keepalive)
+  })
+})
+
+/**
+ * GET /session/:sessionId/state
+ * Returns the full Playwright storageState (cookies + localStorage) for the
+ * session. Used to persist a user's login across agent runs.
+ */
+app.get('/session/:sessionId/state', async (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { sessionId } = req.params
+  const entry = sessions.get(sessionId)
+  if (!entry) return res.status(404).json({ success: false, error: 'Session not found' })
+  try {
+    const storageState = await entry.context.storageState()
+    const url = entry.page.url()
+    const title = await entry.page.title().catch(() => '')
+    res.json({ success: true, storageState, url, title, sessionId })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e) })
+  }
+})
+
+/**
+ * POST /sessions/restore
+ * Creates a new browser session pre-loaded with saved cookies/storage.
+ * Body: { storageState, startUrl? }
+ * This is how the agent gets an already-logged-in browser session.
+ */
+app.post('/sessions/restore', async (req, res) => {
+  if (!checkAuth(req, res)) return
+  const { storageState, startUrl } = req.body || {}
+  if (!storageState) {
+    return res.status(400).json({ success: false, error: 'storageState required' })
+  }
+  try {
+    const sessionId = randomId()
+    const browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+      ],
+    })
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+      ignoreHTTPSErrors: true,
+      storageState,
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    })
+    const page = await context.newPage()
+    if (startUrl) {
+      await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
+    }
+    const entry = { browser, context, page, lastUsedAt: Date.now() }
+    sessions.set(sessionId, entry)
+    log('info', 'Session restored from saved state', { sessionId, startUrl })
+
+    const url = page.url()
+    const title = await page.title().catch(() => '')
+    res.json({ success: true, sessionId, url, title })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || String(e) })
   }
 })
 

@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const errorParam = searchParams.get('error')
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin).replace(/\/$/, '')
   const redirectUri = `${baseUrl}/api/integrations/gmail/callback`
   const accountUrl = `${baseUrl}/dashboard/account`
 

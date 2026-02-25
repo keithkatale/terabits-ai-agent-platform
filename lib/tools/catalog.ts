@@ -13,6 +13,7 @@ import { slackMessage } from './implementations/slack-message'
 import { discordMessage } from './implementations/discord-message'
 import { gmailSend } from './implementations/gmail-send'
 import { browserAutomation } from './implementations/browser-automation'
+import { requestCredentials } from './implementations/request-credentials'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -187,9 +188,21 @@ export const TOOL_CATALOG: ToolDefinition[] = [
       'Navigate the web, fill forms, and click elements in a real browser. Enables agents to complete web tasks that require login or interaction (e.g. get a receipt, create an order). Deploy the browser worker (services/browser-worker) to Railway, Render, or Fly.io and set BROWSER_WORKER_URL.',
     icon: 'Globe',
     category: 'web',
-    status: 'coming_soon',
+    // Active when ENABLE_BROWSER_AUTOMATION=true; shown as coming_soon otherwise
+    status: process.env.ENABLE_BROWSER_AUTOMATION === 'true' ? 'available' : 'coming_soon',
     envVars: ['ENABLE_BROWSER_AUTOMATION', 'BROWSER_WORKER_URL'],
     tool: browserAutomation,
+  },
+  {
+    name: 'request_credentials',
+    label: 'Request Credentials',
+    description:
+      'Ask the user to provide login credentials for a platform. Shows a secure masked form in the chat — credentials go directly to the browser, the AI never sees them.',
+    icon: 'KeyRound',
+    category: 'web',
+    status: process.env.ENABLE_BROWSER_AUTOMATION === 'true' ? 'available' : 'coming_soon',
+    defaultEnabled: false,
+    tool: requestCredentials,
   },
 
   // ─── Actions ──────────────────────────────────────────────────────────────
