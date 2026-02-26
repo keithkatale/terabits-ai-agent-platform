@@ -72,7 +72,7 @@ export function HeroSection() {
               <button
                 onClick={() => handleSubmit()}
                 disabled={!input.trim() || isSubmitting}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity disabled:opacity-30 hover:opacity-90"
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-opacity disabled:opacity-30 hover:opacity-90"
                 aria-label="Go to assistant"
               >
                 {isSubmitting ? (

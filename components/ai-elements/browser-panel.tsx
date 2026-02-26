@@ -406,9 +406,9 @@ export function BrowserPanelHandoffBanner({ className }: { className?: string })
   const { mode, setMode } = useBrowserPanel()
   if (mode !== 'human-handoff') return null
   return (
-    <div className={cn('flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800', className)}>
-      <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-      <p className="flex-1 text-xs text-amber-800 dark:text-amber-300">
+    <div className={cn('flex items-center gap-2 px-3 py-2 bg-amber-50/80 border-b border-amber-200', className)}>
+      <Shield className="h-4 w-4 text-amber-700 shrink-0" />
+      <p className="flex-1 text-xs text-amber-800">
         The agent needs you to complete this step — log in or solve the CAPTCHA, then click <strong>Done</strong>.
       </p>
       <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => setMode('viewing')}>Done</Button>
@@ -608,7 +608,7 @@ export function BrowserPanelStatusBar({ className }: { className?: string }) {
   return (
     <div className={cn('flex items-center gap-2 px-3 py-1.5 border-t border-border bg-muted/30 text-[10px] text-muted-foreground', className)}>
       {isConnected
-        ? <span className="flex items-center gap-1 text-green-600 dark:text-green-400"><span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />Live</span>
+        ? <span className="flex items-center gap-1 text-green-700"><span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />Live</span>
         : <span className="flex items-center gap-1 text-yellow-600"><span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />Reconnecting…</span>
       }
       {host && <span className="truncate">{host}</span>}

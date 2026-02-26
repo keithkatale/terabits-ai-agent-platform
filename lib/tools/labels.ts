@@ -18,4 +18,8 @@ export const TOOL_LABELS: Record<string, string> = {
   list_workflows: 'List your workflows',
   offer_save_workflow: 'Offer to save workflow',
   offer_save_browser_session: 'Offer to save login',
+  read_workspace_file: 'Read workspace file',
+  write_workspace_file: 'Write workspace file',
+  list_workspace_files: 'List workspace files',
+  run_command: 'Run command',
 }

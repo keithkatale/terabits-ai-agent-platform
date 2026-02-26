@@ -13,6 +13,8 @@ import { tokenConverter } from '@/lib/payments/token-to-credit-converter'
 import { normalizeUsage, addUsage } from '@/lib/ai/usage'
 import { getOrCreatePersonalAssistantAgent } from '@/lib/assistant-chat'
 import { generateChatTitle } from '@/lib/chat-title'
+import { getWorkspaceTools } from '@/lib/tools/workspace-tools'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -96,7 +98,40 @@ const GUEST_SYSTEM_PROMPT = `You are a trial AI assistant. The user is not signe
 - **Be helpful but concise.** Do the task, give the result, then the one-line prompt to create an account. Do not repeat the sign-up message multiple times in one reply.`
 
 export async function POST(req: Request) {
-  const user = await getCurrentUser()
+  let body: { messages?: unknown[]; sessionId?: string; connectPlatform?: string; scheduled_task_id?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const cronSecret = req.headers.get('x-cron-secret')
+  const isCronRun = Boolean(
+    process.env.CRON_SECRET && cronSecret === process.env.CRON_SECRET && body.scheduled_task_id
+  )
+
+  let user: { id: string; email?: string } | null
+  if (isCronRun) {
+    const admin = createAdminClient()
+    if (!admin) {
+      return new Response(JSON.stringify({ error: 'Cron run requires admin client' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    }
+    const { data: task, error: taskError } = await admin
+      .from('scheduled_tasks')
+      .select('id, user_id, desktop_id, status')
+      .eq('id', body.scheduled_task_id)
+      .single()
+    if (taskError || !task || task.status !== 'running') {
+      return new Response(JSON.stringify({ error: 'Task not found or not running' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+    }
+    user = { id: task.user_id }
+  } else {
+    user = await getCurrentUser()
+  }
+
   const supabase = await createClient()
   const isGuest = !user
 
@@ -110,28 +145,16 @@ export async function POST(req: Request) {
     }
   }
 
-  let body: { messages?: unknown[] }
-  try {
-    body = await req.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const { messages, sessionId: bodySessionId, connectPlatform } = body as {
-    messages?: unknown[]
-    sessionId?: string
-    /** When set, use Gemini Computer Use for browser_automation and add offer_save_browser_session (connect-account flow). */
-    connectPlatform?: string
-  }
+  const { messages, sessionId: bodySessionId, connectPlatform, wait: bodyWait } = body
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return new Response(JSON.stringify({ error: 'messages array required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     })
   }
+
+  const waitParam = typeof req.url === 'string' ? new URL(req.url).searchParams.get('wait') : null
+  const wait = bodyWait !== undefined ? bodyWait !== false && bodyWait !== 'false' : waitParam !== 'false'
 
   let modelMessages: { role: 'user' | 'assistant' | 'system'; content: unknown }[]
   try {
@@ -150,21 +173,37 @@ export async function POST(req: Request) {
   let tools: Record<string, ReturnType<typeof tool>>
   let assistantAgentId: string | null = null
   let creditBalance: { balance: number } | null = null
+  let desktopIdForPayload: string | null = null
 
   if (isGuest) {
     systemPrompt = GUEST_SYSTEM_PROMPT
     tools = catalogTools
   } else {
     creditBalance = await creditsService.getBalance(user!.id)
-    assistantAgentId = await getOrCreatePersonalAssistantAgent(supabase, user!.id)
+    assistantAgentId = await getOrCreatePersonalAssistantAgent(user!.id)
     const { data: assistantAgent } = await supabase
       .from('agents')
       .select('name, instruction_prompt')
       .eq('id', assistantAgentId)
       .single()
-    const basePrompt = ASSISTANT_SYSTEM_PROMPT + (connectPlatform
+    let basePrompt = ASSISTANT_SYSTEM_PROMPT + (connectPlatform
       ? `\n\n## Connect-account flow (current request)\nYou are helping the user connect their account for a platform. Use \`browser_automation\` in **one step at a time** (observe–act–observe). Open the platform login page, guide them through logging in or creating an account. When you see they are successfully logged in (e.g. dashboard, profile, or a clear "Welcome" state), call \`offer_save_browser_session\` with the current \`sessionId\` and platform so they can save the session for future use.`
       : '')
+    let desktopForWorkspace: { id: string } | null = null
+    if (typeof bodySessionId === 'string' && bodySessionId.trim()) {
+      const { data: desktop } = await supabase
+        .from('desktops')
+        .select('id, project_instructions')
+        .eq('id', bodySessionId.trim())
+        .eq('user_id', user!.id)
+        .single()
+      if (desktop) {
+        desktopForWorkspace = desktop
+        desktopIdForPayload = desktop.id
+        const instructions = (desktop.project_instructions ?? '').trim()
+        basePrompt = `## Project instructions\n${instructions}\n\n---\n` + basePrompt
+      }
+    }
     systemPrompt = buildExecutionSystemPrompt(
       assistantAgent?.name ?? 'Assistant',
       basePrompt
@@ -240,11 +279,90 @@ export async function POST(req: Request) {
       })
     }
     tools = { ...catalogTools, ...assistantOnlyTools }
+    if (desktopForWorkspace) {
+      tools = { ...tools, ...getWorkspaceTools(desktopForWorkspace.id, user!.id) }
+    }
   }
 
   const execContext = !isGuest && user
     ? { userId: user.id, browserMode: connectPlatform ? ('gemini' as const) : undefined }
     : { userId: null as string | null, browserMode: undefined }
+
+  // Accept-then-run: enqueue job and return 202 with runId and streamUrl (authenticated, non-cron only)
+  if (!wait && !isGuest && user && !isCronRun) {
+    const sessionId = typeof bodySessionId === 'string' && bodySessionId ? bodySessionId : null
+    if (!sessionId) {
+      return new Response(
+        JSON.stringify({ error: 'sessionId (desktop id) required for async run' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    const lastMsg = messages[messages.length - 1] as { role?: string; content?: string } | undefined
+    const lastContent = typeof lastMsg?.content === 'string' ? lastMsg.content : ''
+    if (lastMsg?.role === 'user' && lastContent.trim() && assistantAgentId) {
+      const { data: insertedMessage } = await supabase
+        .from('messages')
+        .insert({
+          agent_id: assistantAgentId,
+          session_id: sessionId,
+          role: 'user',
+          content: lastContent.trim(),
+          message_type: 'text',
+          metadata: {},
+        })
+        .select('id')
+        .single()
+      const isFirstMessageInSession = messages.length === 1
+      if (isFirstMessageInSession && insertedMessage?.id) {
+        const messageId = insertedMessage.id
+        generateChatTitle(lastContent.trim())
+          .then(async (title) => {
+            const client = await createClient()
+            await client.from('messages').update({ metadata: { sessionTitle: title } }).eq('id', messageId)
+            await client.from('desktops').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', user.id)
+          })
+          .catch(() => {})
+      }
+    }
+    const oneCredit = 1
+    await creditsService.deductCredits(
+      user.id,
+      oneCredit,
+      'Assistant chat (queued run)'
+    )
+    const payload = {
+      sessionId,
+      messages,
+      systemPrompt,
+      userId: user.id,
+      desktopId: desktopIdForPayload,
+      assistantAgentId,
+      connectPlatform: connectPlatform ?? null,
+      isGuest: false,
+    }
+    const { data: job, error: jobError } = await supabase
+      .from('assistant_run_jobs')
+      .insert({
+        session_id: sessionId,
+        user_id: user.id,
+        status: 'queued',
+        payload,
+      })
+      .select('run_id')
+      .single()
+    if (jobError || !job?.run_id) {
+      return new Response(
+        JSON.stringify({ error: 'Failed to enqueue run', details: jobError?.message }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '')
+    const streamUrl = `${baseUrl}/api/chat/stream?runId=${job.run_id}`
+    return new Response(
+      JSON.stringify({ runId: job.run_id, acceptedAt: new Date().toISOString(), streamUrl }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -283,10 +401,12 @@ export async function POST(req: Request) {
 
             if (isFirstMessageInSession && insertedMessage?.id) {
               const messageId = insertedMessage.id
+              const userId = user.id
               generateChatTitle(lastContent.trim())
                 .then(async (title) => {
                   const client = await createClient()
                   await client.from('messages').update({ metadata: { sessionTitle: title } }).eq('id', messageId)
+                  await client.from('desktops').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', userId)
                 })
                 .catch(() => {})
             }

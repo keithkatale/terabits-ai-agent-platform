@@ -196,7 +196,7 @@ export function ConnectedAccounts() {
               key={platform.id}
               className={cn(
                 'flex flex-col gap-3 rounded-xl border bg-card p-4 transition-all',
-                connected ? 'border-green-500/30 bg-green-50/30 dark:bg-green-950/10' : 'border-border'
+                connected ? 'border-green-500/30 bg-green-50/40' : 'border-border'
               )}
             >
               {/* Icon + name + status */}

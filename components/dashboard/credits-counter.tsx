@@ -32,7 +32,7 @@ export function CreditsCounter({ onCounterClick }: CreditsCounterProps) {
   return (
     <button
       onClick={onCounterClick}
-      className="touch-target flex items-center justify-center gap-2 rounded-lg border border-transparent bg-primary/8 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/15 transition-colors md:min-h-0 md:min-w-0"
+      className="touch-target flex items-center justify-center gap-2 rounded-lg border border-transparent bg-primary/8 px-3.5 py-2 text-sm font-medium text-primary hover:bg-primary/15 transition-colors md:min-h-0 md:min-w-0 md:px-3 md:py-1.5"
       title="Click to view account details"
     >
       {isLoading ? (

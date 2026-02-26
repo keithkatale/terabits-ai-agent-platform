@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
   }
 
-  const agentId = await getOrCreatePersonalAssistantAgent(supabase, user.id)
+  const agentId = await getOrCreatePersonalAssistantAgent(user.id)
 
   const { data: messages, error } = await supabase
     .from('messages')
@@ -88,7 +88,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
   }
 
-  const agentId = await getOrCreatePersonalAssistantAgent(supabase, user.id)
+  const agentId = await getOrCreatePersonalAssistantAgent(user.id)
 
   await supabase.from('messages').delete().eq('agent_id', agentId).eq('session_id', sessionId)
   await supabase.from('execution_logs').delete().eq('agent_id', agentId).eq('session_id', sessionId)

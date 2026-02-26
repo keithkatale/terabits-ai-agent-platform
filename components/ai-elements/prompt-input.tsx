@@ -77,14 +77,14 @@ function PromptInputFooter({ className, ...props }: React.HTMLAttributes<HTMLDiv
   return (
     <div
       data-slot="prompt-input-footer"
-      className={cn('flex items-center gap-2 border-t border-border/50 px-2 py-2', className)}
+      className={cn('flex items-center gap-2 border-t border-border/50 px-3 py-2.5 sm:px-2 sm:py-2', className)}
       {...props}
     />
   )
 }
 
 function PromptInputTools({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div data-slot="prompt-input-tools" className={cn('flex flex-1 items-center gap-1', className)} {...props} />
+  return <div data-slot="prompt-input-tools" className={cn('flex flex-1 items-center gap-2 min-w-0', className)} {...props} />
 }
 
 export interface PromptInputSubmitProps extends React.ComponentProps<typeof Button> {
@@ -99,7 +99,7 @@ function PromptInputSubmit({ status = 'ready', disabled, className, ...props }: 
       type="submit"
       size="icon"
       disabled={disabled || isStreaming}
-      className={cn('h-8 w-8 shrink-0 rounded-lg', className)}
+      className={cn('h-8 w-8 shrink-0 rounded-xl', className)}
       {...props}
     >
       {isStreaming ? (

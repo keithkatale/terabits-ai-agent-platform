@@ -104,7 +104,7 @@ export async function POST(
   const systemPrompt = buildExecutionSystemPrompt(workflow.instruction_prompt)
   const userMessage = formatUserInput(input as Record<string, unknown>)
 
-  const assistantAgentId = await getOrCreatePersonalAssistantAgent(supabase, user.id)
+  const assistantAgentId = await getOrCreatePersonalAssistantAgent(user.id)
   const runStartedAt = new Date().toISOString()
   const sessionId = crypto.randomUUID()
 

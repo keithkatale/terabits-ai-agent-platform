@@ -168,7 +168,7 @@ export function CredentialForm({
             Your credentials go directly to the browser — the AI never sees them
           </p>
         </div>
-        <Badge variant="outline" className="text-[10px] gap-1 border-green-400/40 text-green-600 dark:text-green-400">
+        <Badge variant="outline" className="text-[10px] gap-1 border-green-400/40 text-green-700">
           <ShieldCheck className="h-3 w-3" />
           Secure
         </Badge>

@@ -16,17 +16,22 @@ import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
 
-function SidebarColumn({ sidebar }: { sidebar: React.ReactNode }) {
+function SidebarColumn({ sidebar, footer }: { sidebar: React.ReactNode; footer?: React.ReactNode }) {
   const collapse = useSidebarCollapse()
   const collapsed = collapse?.collapsed ?? false
   return (
     <div
       className={cn(
-        'hidden h-full shrink-0 flex-col border-r border-border bg-background dark:bg-input/30 transition-[width] duration-200 ease-out md:flex',
+        'hidden h-full shrink-0 flex-col bg-[#f7f6f3] transition-[width] duration-200 ease-out md:flex',
         collapsed ? 'w-16' : 'w-[260px]'
       )}
     >
-      {sidebar}
+      <div className="min-h-0 flex-1 overflow-hidden flex flex-col">{sidebar}</div>
+      {footer != null && (
+        <div className="shrink-0 p-3 pt-2 flex items-center justify-center gap-2">
+          {footer}
+        </div>
+      )}
     </div>
   )
 }
@@ -70,8 +75,8 @@ function DashboardHeader({
   ) : null
 
   return (
-    <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-background backdrop-blur-sm pt-safe">
-      <div className="flex h-12 w-full items-center justify-between gap-3 px-4 md:h-10 md:px-6">
+    <header className="sticky top-0 z-40 shrink-0 bg-[#f7f6f3] pt-safe">
+      <div className="flex h-12 w-full items-center justify-between gap-3 px-4 md:h-10 md:px-6 sm:px-5">
         <div className="flex min-w-0 flex-1 items-center justify-start">
           {headerLeft}
         </div>
@@ -99,12 +104,12 @@ function DashboardShellInner({ user, profile, children, sidebar, currentPage, se
   initials: string
 }) {
   const headerRight = (
-    <div className="flex items-center gap-1 md:gap-3">
+    <div className="flex items-center gap-3 md:gap-3">
       <ThemeToggle variant="ghost" size="icon-sm" className="touch-target flex md:size-8" />
       <CreditsCounter onCounterClick={() => setIsCreditsModalOpen(true)} />
       <button
         onClick={() => setCurrentPage('account')}
-        className="touch-target flex shrink-0 items-center justify-center rounded-lg border-0 bg-secondary text-[10px] font-medium text-account-foreground transition-colors hover:bg-secondary/80 md:h-7 md:w-7 md:min-h-0 md:min-w-0"
+        className="touch-target flex shrink-0 items-center justify-center rounded-full bg-[#f7f6f3] text-[10px] font-medium text-account-foreground transition-colors hover:bg-[#f7f6f3]/80 md:h-7 md:w-7 md:min-h-0 md:min-w-0"
         title="Open account details"
       >
         {initials}
@@ -139,7 +144,11 @@ function DashboardShellInner({ user, profile, children, sidebar, currentPage, se
         </div>
       </TabScrollArea>
     ) : (
-      children
+      <div className="flex min-h-0 flex-1 flex-col bg-[#f7f6f3] p-3 pr-4 pb-4 pt-3">
+        <div className="min-h-0 flex-1 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col">
+          {children}
+        </div>
+      </div>
     )
 
   const headerAndMain = (
@@ -156,9 +165,11 @@ function DashboardShellInner({ user, profile, children, sidebar, currentPage, se
     return (
       <SidebarCollapseProvider>
         <div className="flex h-svh overflow-hidden">
-          <SidebarColumn sidebar={sidebar} />
+          <SidebarColumn sidebar={sidebar} footer={headerRight} />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {headerAndMain}
+            <main className="min-h-0 flex-1 overflow-hidden pb-safe px-safe flex flex-col">
+              {mainContent}
+            </main>
           </div>
         </div>
         <CreditsPurchaseModalSimple

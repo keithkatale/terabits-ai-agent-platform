@@ -48,7 +48,6 @@ import {
 import Image from 'next/image'
 import type { LucideIcon } from 'lucide-react'
 import {
-  Sparkles,
   Brain,
   Wrench,
   Loader2,
@@ -506,7 +505,7 @@ function AssistantMessageContent({
             </div>
           )}
           {step.type === 'result' && (
-            <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+            <div className="flex items-center gap-2 text-xs text-green-700">
               <CheckCircle2 className="h-3.5 w-3.5" />
               <span>{step.message}</span>
             </div>
@@ -728,9 +727,142 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
           messages: body,
           sessionId: sessionIdRef.current ?? undefined,
           ...(connectPlatform ? { connectPlatform } : {}),
+          ...((typeof process !== 'undefined' && process.env.NEXT_PUBLIC_USE_ASYNC_CHAT === 'true') || sessionIdRef.current ? { wait: false } : {}),
         }),
         signal,
       })
+
+      if (response.status === 202) {
+        const data = await response.json().catch(() => ({}))
+        const runId = data.runId as string | undefined
+        const streamUrl = data.streamUrl as string | undefined
+        if (!runId || !streamUrl) throw new Error('Invalid 202 response: missing runId or streamUrl')
+        const streamPath = `/api/chat/stream?runId=${encodeURIComponent(runId)}`
+        const es = new EventSource(streamPath)
+        let reasoningId = `reasoning-${Date.now()}`
+        const handleEvent = (ev: MessageEvent) => {
+          try {
+            const data = JSON.parse(ev.data)
+            if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development' && data.type) {
+              console.debug('[chat/run] SSE', data.type, data.tool ? `tool=${data.tool}` : '', data.status ?? '')
+            }
+            if (data.type === 'start') {
+              if (data.sessionId) sessionIdRef.current = data.sessionId
+              if (!guest && data.sessionId) window.history.replaceState(null, '', `/chat/${data.sessionId}`)
+              if (data.runId) currentRunIdRef.current = data.runId
+            } else if (data.type === 'reasoning') {
+              setSteps((prev) => {
+                const current = prev.find((s) => s.id === reasoningId)
+                const newMsg = (current?.message || '') + (data.delta || '')
+                const next = [...prev.filter((s) => s.id !== reasoningId), { id: reasoningId, type: 'reasoning' as const, message: newMsg, timestamp: new Date() }]
+                stepsRef.current = next
+                return next
+              })
+            } else if (data.type === 'assistant') {
+              const delta = data.delta || ''
+              setCurrentAssistantText((t) => t + delta)
+              finalTextRef.current += delta
+            } else if (data.type === 'tool') {
+              if (data.tool === 'offer_save_workflow' && data.status === 'completed' && data.output?.__workflowOffer) {
+                const o = data.output as { suggestedName?: string; description?: string; instructionPrompt?: string; inputFields?: WorkflowOffer['inputFields'] }
+                if (o.suggestedName && o.instructionPrompt) {
+                  setWorkflowOffer({ suggestedName: o.suggestedName, description: o.description ?? o.suggestedName, instructionPrompt: o.instructionPrompt, inputFields: Array.isArray(o.inputFields) ? o.inputFields : [] })
+                }
+              }
+              if (data.tool === 'offer_save_browser_session' && data.status === 'completed' && data.output?.__saveSessionOffer) {
+                const o = data.output as { platform?: string; sessionId?: string; platformLabel?: string; platformUrl?: string }
+                if (o.platform && o.sessionId) {
+                  const defaultUrls: Record<string, string> = { linkedin: 'https://www.linkedin.com/login', twitter: 'https://x.com/login', instagram: 'https://www.instagram.com/accounts/login/', facebook: 'https://www.facebook.com/', reddit: 'https://www.reddit.com/login/', producthunt: 'https://www.producthunt.com/login', github: 'https://github.com/login', notion: 'https://www.notion.so/login' }
+                  setSaveSessionOffer({ platform: o.platform, sessionId: o.sessionId, platformLabel: o.platformLabel ?? o.platform, platformUrl: o.platformUrl ?? defaultUrls[o.platform] ?? `https://${o.platform}.com` })
+                }
+              }
+              if (data.tool === 'request_credentials' && data.status === 'completed' && data.output?.type === 'credential_request') {
+                setPendingCredentialRequest((data.output as Record<string, unknown>) ?? null)
+                setCredentialTimerSeconds(120)
+              }
+              const toolLabel = String(TOOL_LABELS[data.tool] ?? data.tool ?? 'Tool')
+              const state = data.status === 'completed' ? 'completed' : data.status === 'error' ? 'error' : 'running'
+              const safeInput = normalizeToolPayload(data.input)
+              const safeOutput = state === 'running' ? undefined : normalizeToolPayload(data.output)
+              setSteps((prev) => {
+                let next: AssistantStep[]
+                if (state === 'running') {
+                  next = [...prev, { id: `tool-${data.tool}-${Date.now()}`, type: 'tool', message: toolLabel, timestamp: new Date(), toolData: { name: toolLabel, state: 'running', input: safeInput, output: undefined } }]
+                } else {
+                  const runningIndex = prev.map((s, i) => ({ s, i })).reverse().find(({ s }) => s.type === 'tool' && s.toolData?.name === toolLabel && s.toolData?.state === 'running')
+                  if (runningIndex != null) {
+                    next = [...prev.slice(0, runningIndex.i), { ...prev[runningIndex.i], toolData: { name: toolLabel, state: state as 'completed' | 'error', input: safeInput, output: safeOutput } }, ...prev.slice(runningIndex.i + 1)]
+                  } else {
+                    next = [...prev, { id: `tool-${data.tool}-${Date.now()}`, type: 'tool', message: toolLabel, timestamp: new Date(), toolData: { name: toolLabel, state: state as 'completed' | 'error', input: safeInput, output: safeOutput } }]
+                  }
+                }
+                stepsRef.current = next
+                return next
+              })
+              if (data.status === 'completed') setCurrentAssistantText('')
+            } else if (data.type === 'complete') {
+              setFinalOutput(data.result)
+              const out = data.result?.output ?? data.result
+              const resultText = (out && typeof out === 'object' && 'result' in out && out.result) ? String(out.result) : ''
+              if (resultText) finalTextRef.current = resultText
+            } else if (data.type === 'error') {
+              setSteps((prev) => {
+                const errStep: AssistantStep = { id: `error-${Date.now()}`, type: 'error', message: data.error || 'An error occurred', timestamp: new Date() }
+                const next = [...prev, errStep]
+                stepsRef.current = next
+                return next
+              })
+            } else if (data.type === 'credits_used') {
+              setCreditsUsed(data.creditsUsed ?? 0)
+              setCreditBalance(data.balanceAfter ?? null)
+              setSteps((prev) => {
+                const credStep: AssistantStep = { id: `credits-${Date.now()}`, type: 'credits', message: `${data.creditsUsed ?? 0} credit(s) used · ${data.balanceAfter ?? 0} remaining`, timestamp: new Date() }
+                const next = [...prev, credStep]
+                stepsRef.current = next
+                return next
+              })
+            }
+            if (data.type === 'complete' || data.type === 'error') {
+              es.close()
+              const resultOutput = data.type === 'complete' && data.result ? (data.result as { output?: { result?: string }; result?: string }) : null
+              const resultStr = resultOutput?.output?.result ?? resultOutput?.result ?? ''
+              const finalText = (finalTextRef.current || resultStr) as string
+              const stepsToSave = [...stepsRef.current]
+              const runIdToAttach = currentRunIdRef.current
+              currentRunIdRef.current = null
+              setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: finalText, steps: stepsToSave, runId: runIdToAttach ?? undefined }])
+              setSteps([])
+              stepsRef.current = []
+              setCurrentAssistantText('')
+              setFinalOutput(null)
+              finalTextRef.current = ''
+              setIsStreaming(false)
+              abortControllerRef.current = null
+            }
+          } catch (parseErr) {
+            if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') console.error('[chat/run] SSE parse error:', parseErr)
+          }
+        }
+        es.onmessage = handleEvent
+        es.onerror = () => {
+          es.close()
+          if (stepsRef.current.length > 0 && !finalTextRef.current && !finalOutput) {
+            const finalText = finalTextRef.current || ''
+            const stepsToSave = [...stepsRef.current]
+            const runIdToAttach = currentRunIdRef.current
+            currentRunIdRef.current = null
+            setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: finalText, steps: stepsToSave, runId: runIdToAttach ?? undefined }])
+          }
+          setSteps([])
+          stepsRef.current = []
+          setCurrentAssistantText('')
+          setFinalOutput(null)
+          finalTextRef.current = ''
+          setIsStreaming(false)
+          abortControllerRef.current = null
+        }
+        return
+      }
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}))
@@ -958,31 +1090,18 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
 
   return (
     <ChatErrorBoundary>
-      <div className="relative flex h-full min-h-0 flex-col">
-        <Conversation className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        <ConversationContent ref={conversationScrollRef} className="flex-1 overflow-y-auto min-h-0 bg-background">
+      <div className="relative flex h-full min-h-0 flex-col bg-white">
+        <Conversation className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <ConversationContent ref={conversationScrollRef} className="flex-1 overflow-y-auto min-h-0 bg-white">
           {messages.length === 0 && !isStreaming ? (
-            <div className="flex min-h-full min-w-0 flex-col items-center justify-start px-4 pt-[13vh] py-8">
+            <div className="flex min-h-full min-w-0 flex-col items-center justify-start px-5 py-10 pt-[12vh] pb-14 sm:px-4 sm:py-8 bg-white">
               <h2 className="font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
                 What can I do for you?
               </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:mt-3">
                 I can search the web, send emails, look things up, and run workflows. Describe a task or pick one below.
               </p>
-              {guest && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  You’re in trial mode. Conversations aren’t saved.{' '}
-                  <button
-                    type="button"
-                    onClick={() => setSignInModalOpen(true)}
-                    className="font-medium text-primary underline underline-offset-2 hover:no-underline"
-                  >
-                    Sign in
-                  </button>
-                  {' '}to save conversations and unlock full capabilities.
-                </p>
-              )}
-              <div className="mt-8 w-full max-w-2xl">
+              <div className="mt-10 w-full max-w-2xl sm:mt-8">
                 <PromptInput
                   onSubmit={(message) => {
                     const text = (message.text ?? '').trim()
@@ -996,7 +1115,7 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
                       onChange={(e) => setInputValue(e.target.value)}
                       placeholder="Describe a task or responsibility…"
                       disabled={isStreaming}
-                      className="min-h-0 border-0 px-4 pt-4 pb-3 text-sm placeholder:text-muted-foreground/60"
+                      className="min-h-0 border-0 px-4 pt-5 pb-4 text-sm placeholder:text-muted-foreground/60 sm:pt-4 sm:pb-3"
                     />
                   </PromptInputBody>
                   <PromptInputFooter>
@@ -1019,16 +1138,16 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
                   </PromptInputFooter>
                 </PromptInput>
               </div>
-              <div className="mt-6 w-full max-w-4xl">
+              <div className="mt-10 w-full max-w-4xl sm:mt-6">
                 <div className="flex justify-center">
-                  <div className="inline-flex gap-6 border-b border-border/60">
+                  <div className="inline-flex gap-4 border-b border-border/60 sm:gap-6">
                     {PRESET_TABS.map((tab, i) => (
                       <button
                         key={tab.id}
                         type="button"
                         onClick={() => setActivePresetTab(i)}
                         className={cn(
-                          'pb-2.5 text-sm font-medium transition-colors border-b-2 -mb-[1px]',
+                          'px-2 pb-3 pt-1 text-sm font-medium transition-colors border-b-2 -mb-[1px] sm:px-0 sm:pb-2.5',
                           activePresetTab === i
                             ? 'text-foreground border-primary'
                             : 'text-muted-foreground border-transparent hover:text-foreground'
@@ -1039,16 +1158,16 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
                     ))}
                   </div>
                 </div>
-                <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+                <div className="mt-8 grid grid-cols-1 gap-6 sm:mt-5 sm:gap-4 sm:grid-cols-2 md:grid-cols-3">
                   {PRESET_TABS[activePresetTab].items.map((item) => (
                     <button
                       key={item.title}
                       type="button"
                       onClick={() => setInputValue(item.prompt)}
-                      className="flex min-h-[7rem] flex-col items-start gap-3 rounded-lg border border-border/80 bg-card/60 px-4 py-4 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-card"
+                      className="flex min-h-[8rem] flex-col items-start gap-4 rounded-lg border border-border/80 bg-card/60 px-5 py-5 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-card sm:min-h-[7rem] sm:gap-3 sm:px-4 sm:py-4"
                     >
                       <span className="text-sm font-medium leading-snug text-foreground">{item.title}</span>
-                      <div className="flex flex-wrap gap-0.5">
+                      <div className="flex flex-wrap gap-1.5">
                         {item.icons.map((icon, idx) => {
                           const isImg = typeof icon === 'string'
                           return (
@@ -1073,7 +1192,7 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
               </div>
             </div>
           ) : (
-            <div className="mx-auto w-full max-w-4xl min-h-full py-6 px-4 space-y-6 bg-background">
+            <div className="mx-auto w-full max-w-2xl min-h-full py-6 px-4 space-y-6 bg-white">
               {messages.map((msg) => (
                 <div key={msg.id} className="space-y-1">
                   {msg.role === 'user' ? (
@@ -1138,7 +1257,7 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
 
       <div className={cn('flex shrink-0 flex-col items-center gap-2 px-4 pb-4', messages.length === 0 && !isStreaming && 'hidden')}>
         {pendingCredentialRequest && pendingCredentialRequest.type === 'credential_request' && (
-          <div className="w-full max-w-2xl rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 shadow-lg p-4 space-y-3">
+          <div className="w-full max-w-2xl rounded-xl border border-amber-200 bg-amber-50/60 shadow-lg p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="font-semibold text-foreground">
                 Sign in required — enter credentials below
@@ -1239,7 +1358,7 @@ export function AssistantChat({ guest = false, initialSessionId }: { guest?: boo
         {saveSessionOffer && (
           <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-lg p-4 flex items-center gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/10">
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <CheckCircle2 className="h-5 w-5 text-green-700" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-foreground">Save login for {saveSessionOffer.platformLabel}?</p>

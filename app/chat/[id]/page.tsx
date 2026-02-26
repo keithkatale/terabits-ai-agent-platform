@@ -1,4 +1,4 @@
-import { AssistantChat } from '@/components/dashboard/assistant-chat'
+import { DesktopDetailTabs } from '@/components/desktop/desktop-detail-tabs'
 
 export default async function ChatByIdPage({
   params,
@@ -8,7 +8,7 @@ export default async function ChatByIdPage({
   const { id } = await params
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <AssistantChat initialSessionId={id} />
+      <DesktopDetailTabs desktopId={id} />
     </div>
   )
 }

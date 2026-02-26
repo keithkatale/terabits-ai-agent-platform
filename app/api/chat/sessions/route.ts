@@ -17,7 +17,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const agentId = await getOrCreatePersonalAssistantAgent(supabase, user.id)
+  const agentId = await getOrCreatePersonalAssistantAgent(user.id)
 
   // Fetch all messages ascending so we can take the first user message per session (and its AI-generated title if set)
   const { data: messages } = await supabase

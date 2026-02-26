@@ -26,11 +26,11 @@ interface AgentListProps {
 function getStatusColor(status: string) {
   switch (status) {
     case 'deployed':
-      return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+      return 'bg-green-100 text-green-800'
     case 'ready':
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+      return 'bg-blue-100 text-blue-800'
     case 'building':
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+      return 'bg-amber-100 text-amber-800'
     case 'draft':
       return 'bg-muted text-muted-foreground'
     default:

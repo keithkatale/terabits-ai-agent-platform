@@ -181,7 +181,7 @@ export function AccountDetailsPage({
                 Connect your Gmail so agents can send email on your behalf (from your Gmail address).
               </p>
               {gmailMessage && (
-                <p className={`text-xs flex items-center gap-1.5 ${gmailMessage.startsWith('Gmail connected') ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
+                <p className={`text-xs flex items-center gap-1.5 ${gmailMessage.startsWith('Gmail connected') ? 'text-green-700' : 'text-destructive'}`}>
                   {gmailMessage.startsWith('Gmail connected') ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                   {gmailMessage}
                 </p>
@@ -194,7 +194,7 @@ export function AccountDetailsPage({
                 ) : gmailConnected ? (
                   <>
                     <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                      <CheckCircle className="h-3.5 w-3.5 text-green-700" />
                       Connected
                     </span>
                     <Button variant="outline" size="sm" onClick={handleGmailDisconnect}>

@@ -1,83 +1,43 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
-
-/* Claude-inspired stone palette — Light theme (:root), Dark theme (.dark) is default */
+/* Light theme only — cream/foam palette, no gradients, rounded borders */
 :root {
-  --background: #F4F3EE;
-  --foreground: #292524;
-  --card: #FFFFFF;
-  --card-foreground: #292524;
-  --popover: #FFFFFF;
-  --popover-foreground: #292524;
-  --primary: #C15F3C;
-  --primary-foreground: #FFFFFF;
-  --secondary: #E7E5E4;
+  --background: #F6F4EF;
+  --foreground: #2C2926;
+  --card: #FFFEFB;
+  --card-foreground: #2C2926;
+  --popover: #FFFEFB;
+  --popover-foreground: #2C2926;
+  --primary: #8B7355;
+  --primary-foreground: #FFFEFB;
+  --secondary: #EBE8E2;
   --secondary-foreground: #57534E;
-  --muted: #D6D3D1;
+  --muted: #E5E1DA;
   --muted-foreground: #78716C;
-  --accent: #C2B7A2;
-  --accent-foreground: #292524;
-  --destructive: #DC2626;
-  --destructive-foreground: #FFFFFF;
-  --border: #D6D3D1;
-  --input: #D6D3D1;
-  --ring: #C15F3C;
-  --link: #2563eb;
-  --chart-1: #C15F3C;
+  --accent: #E5E1DA;
+  --accent-foreground: #2C2926;
+  --destructive: #B91C1C;
+  --destructive-foreground: #FFFEFB;
+  --border: #E0DBD2;
+  --input: #E0DBD2;
+  --ring: #8B7355;
+  --link: #6B5344;
+  --chart-1: #8B7355;
   --chart-2: #57534E;
   --chart-3: #78716C;
   --chart-4: #A8A29E;
   --chart-5: #44403C;
-  --radius: 4px;
-  --sidebar: #EAE8E2;
-  --sidebar-foreground: #292524;
-  --sidebar-primary: #C15F3C;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #D6D3D1;
-  --sidebar-accent-foreground: #292524;
-  --sidebar-border: #D6D3D1;
-  --sidebar-ring: #C15F3C;
+  --radius: 10px;
+  --sidebar: #F0EDE8;
+  --sidebar-foreground: #2C2926;
+  --sidebar-primary: #8B7355;
+  --sidebar-primary-foreground: #FFFEFB;
+  --sidebar-accent: #E5E1DA;
+  --sidebar-accent-foreground: #2C2926;
+  --sidebar-border: #E0DBD2;
+  --sidebar-ring: #8B7355;
   --account-foreground: #57534E;
-}
-
-/* Dark theme (default) — Main bg, secondary bg, text, links, minor text */
-.dark {
-  --background: #121215;
-  --foreground: #F4F4F5;
-  --card: #1A1A1E;
-  --card-foreground: #F4F4F5;
-  --popover: #1A1A1E;
-  --popover-foreground: #F4F4F5;
-  --primary: #566E55;
-  --primary-foreground: #ffffff;
-  --secondary: #1A1A1E;
-  --secondary-foreground: #F4F4F5;
-  --muted: #1A1A1E;
-  --muted-foreground: #6D6D6E;
-  --accent: #1A1A1E;
-  --accent-foreground: #F4F4F5;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #2a2a2e;
-  --input: #1A1A1E;
-  --ring: #566E55;
-  --link: #566E55;
-  --chart-1: #566E55;
-  --chart-2: #6D6D6E;
-  --chart-3: #737373;
-  --chart-4: #525252;
-  --chart-5: #404040;
-  --sidebar: #121215;
-  --sidebar-foreground: #F4F4F5;
-  --account-foreground: #6D6D6E;
-  --sidebar-primary: #566E55;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1A1A1E;
-  --sidebar-accent-foreground: #F4F4F5;
-  --sidebar-border: #2a2a2e;
-  --sidebar-ring: #566E55;
 }
 
 @theme inline {
@@ -109,13 +69,13 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius: 4px;
-  --radius-sm: 4px;
-  --radius-md: 4px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
-  --radius-2xl: 4px;
-  --radius-3xl: 4px;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 18px;
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -148,13 +108,13 @@
   body {
     @apply bg-background text-foreground;
   }
-  .dark .assistant-message-content a,
-  .dark [class*="markdown-table-wrapper"] a,
-  .dark .prose a {
+  .assistant-message-content a,
+  [class*="markdown-table-wrapper"] a,
+  .prose a {
     color: var(--link);
   }
-  .dark .assistant-message-content a:hover,
-  .dark .prose a:hover {
+  .assistant-message-content a:hover,
+  .prose a:hover {
     text-decoration: underline;
   }
 }

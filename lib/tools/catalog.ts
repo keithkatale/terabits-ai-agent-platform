@@ -14,6 +14,7 @@ import { discordMessage } from './implementations/discord-message'
 import { gmailSend } from './implementations/gmail-send'
 import { browserAutomation } from './implementations/browser-automation'
 import { requestCredentials } from './implementations/request-credentials'
+import { runCommand } from './implementations/run-command'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ export type ToolCategory =
   | 'data_connectors'
   | 'documents'
   | 'actions'
+  | 'coding'
 
 export interface ToolDefinition {
   name: string
@@ -203,6 +205,19 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     status: process.env.ENABLE_BROWSER_AUTOMATION === 'true' ? 'available' : 'coming_soon',
     defaultEnabled: false,
     tool: requestCredentials,
+  },
+
+  // ─── Coding (sandbox command execution) ────────────────────────────────────
+  {
+    name: 'run_command',
+    label: 'Run Command',
+    description: 'Run a shell command in a sandboxed environment (e.g. npm test, python script.py). Requires SANDBOX_API_URL to be configured.',
+    icon: 'Terminal',
+    category: 'coding',
+    status: process.env.SANDBOX_API_URL ? 'available' : 'coming_soon',
+    envVars: ['SANDBOX_API_URL'],
+    defaultEnabled: true,
+    tool: runCommand,
   },
 
   // ─── Actions ──────────────────────────────────────────────────────────────
@@ -425,10 +440,12 @@ export const CATEGORY_LABELS: Record<ToolCategory, string> = {
   data_connectors: 'Data Connectors',
   documents: 'Documents & Files',
   actions: 'Actions & Integrations',
+  coding: 'Coding & Execution',
 }
 
 export const CATEGORY_ORDER: ToolCategory[] = [
   'web',
+  'coding',
   'actions',
   'communication',
   'ai_processing',
