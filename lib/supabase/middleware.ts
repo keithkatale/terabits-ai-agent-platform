@@ -1,7 +1,22 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { auth } from '@/auth'
-import { getSupabaseEnv } from './env'
+
+/**
+ * Read Supabase config inside the middleware (edge runtime).
+ *
+ * In edge runtime ALL process.env references are replaced at build time.
+ * If the Docker image wasn't built with --build-arg NEXT_PUBLIC_SUPABASE_URL
+ * etc., these will be undefined and there's nothing we can do at runtime.
+ * We return null so the middleware can degrade gracefully instead of crashing
+ * every request with a 500.
+ */
+function getEdgeSupabaseEnv(): { url: string; anonKey: string } | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+  if (!url || !anonKey) return null
+  return { url, anonKey }
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -14,13 +29,25 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  const { url, anonKey } = getSupabaseEnv()
+  const env = getEdgeSupabaseEnv()
+  if (!env) {
+    // Supabase env vars were not available at build time (edge runtime inlines
+    // them). Session refresh is impossible, but we let the request through
+    // so the app can still render pages and show its own error/login UI.
+    // Protected routes will be caught by server-side auth checks.
+    console.error(
+      'Middleware: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY ' +
+        'are undefined. Rebuild the Docker image with --build-arg to fix. ' +
+        'Skipping Supabase session refresh.'
+    )
+    return supabaseResponse
+  }
 
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
   const supabase = createServerClient(
-    url,
-    anonKey,
+    env.url,
+    env.anonKey,
     {
       cookies: {
         getAll() {
