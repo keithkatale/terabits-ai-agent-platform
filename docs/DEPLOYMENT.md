@@ -341,7 +341,31 @@ Use the same `CRON_SECRET` value you set in the app.
 
 ---
 
-## Fix: "Your project's URL and API key are required" / App works with cookies but fails on first load
+## Fix: HTTP 500 "Your project's URL and Key are required to create a Supabase client"
+
+If **every** request returns 500 and logs show that Supabase error, the **server** is not seeing the env vars at runtime. The app reads **only** these exact names:
+
+| Required in Cloud Run (Variables & Secrets) | Used for |
+|--------------------------------------------|----------|
+| `NEXT_PUBLIC_SUPABASE_URL`                  | Supabase project URL (e.g. `https://xxxx.supabase.co`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`            | Supabase **anon** (public) key from Dashboard → API |
+| `SUPABASE_SERVICE_ROLE_KEY`                | Server-only admin operations (optional for some flows but required for assistant/cron) |
+
+**Wrong names that will not work:** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`. The code does not read those.
+
+**What to do:**
+
+1. In Cloud Run → your service → **Edit & deploy new revision** → **Variables & Secrets**.
+2. Add or rename so you have **exactly**:
+   - Name: `NEXT_PUBLIC_SUPABASE_URL`, Value: your Supabase project URL.
+   - Name: `NEXT_PUBLIC_SUPABASE_ANON_KEY`, Value: the **anon** key from Supabase Dashboard → Project Settings → API (the long JWT).
+3. Redeploy the revision. New requests will then see the vars and the 500 should stop.
+
+If you use **Secret Manager**, map the secret to the env var name above (e.g. `NEXT_PUBLIC_SUPABASE_ANON_KEY` = secret `supabase-anon-key:latest`). The **name** of the env var in Cloud Run must be exactly `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+---
+
+## Fix: App works with cookies but fails on first load (client-side)
 
 **Symptom:** The app loads when you already have a session (same browser, signed in), but in a new tab or a browser where you’ve never signed in, it shows "Application error" and the console says "Your project's URL and API key are required to create a Supabase client."
 
